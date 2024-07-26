@@ -6,13 +6,9 @@ import * as Store from '@web3-storage/capabilities/store'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
 	S3Client,
-	ListBucketsCommand,
-	ListObjectsV2Command,
-	GetObjectCommand,
 	PutObjectCommand
 } from "@aws-sdk/client-s3";
 import { base64pad } from 'multiformats/bases/base64'
-
 
 /**
  * Welcome to Cloudflare Workers! This is your first worker.
@@ -27,22 +23,20 @@ import { base64pad } from 'multiformats/bases/base64'
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-const idPromise = Signer.generate()
-
-const createService = (context: any) => ({
-	store: () => {
-		return Server.provide(Store.add, async ({ capability }) => {
-			const { ACCESS_KEY_ID, SECRET_ACCESS_KEY, ACCOUNT_ID, BUCKET_NAME } = process.env // TODO should this be bindings?
-			if (!(ACCESS_KEY_ID)){
+const createService = (env: Env) => ({
+	store: {
+		add: Server.provide(Store.add, async ({ capability }) => {
+			const { ACCOUNT_ID, ACCESS_KEY_ID, SECRET_ACCESS_KEY, BUCKET_NAME } = env // TODO should this be bindings?
+			if (!(ACCESS_KEY_ID)) {
 				throw new Error('please set ACCESS_KEY_ID')
 			}
-			if (!(SECRET_ACCESS_KEY)){
+			if (!(SECRET_ACCESS_KEY)) {
 				throw new Error('please set SECRET_ACCESS_KEY')
 			}
-			if (!(ACCOUNT_ID)){
+			if (!(ACCOUNT_ID)) {
 				throw new Error('please set ACCOUNT_ID')
 			}
-			if (!(BUCKET_NAME)){
+			if (!(BUCKET_NAME)) {
 				throw new Error('please set BUCKET_NAME')
 			}
 			const S3 = new S3Client({
@@ -55,54 +49,56 @@ const createService = (context: any) => ({
 			})
 			const { link, size } = capability.nb
 
-      const checksum = base64pad.baseEncode(link.multihash.digest)
-      const cmd = new PutObjectCommand({
-        Key: `${link}/${link}.car`,
-        Bucket: BUCKET_NAME,
-        ChecksumSHA256: checksum,
-        ContentLength: size,
-      })
-      const expiresIn = 60 * 60 * 24 // 1 day
-      const url = new URL(
-        await getSignedUrl(S3, cmd, {
-          expiresIn,
-          unhoistableHeaders: new Set(['x-amz-checksum-sha256']),
-        })
-      )
+			const checksum = base64pad.baseEncode(link.multihash.digest)
+			const cmd = new PutObjectCommand({
+				Key: `${link}/${link}.car`,
+				Bucket: BUCKET_NAME,
+				ChecksumSHA256: checksum,
+				ContentLength: size,
+			})
+			const expiresIn = 60 * 60 * 24 // 1 day
+			const url = new URL(
+				await getSignedUrl(S3, cmd, {
+					expiresIn,
+					unhoistableHeaders: new Set(['x-amz-checksum-sha256']),
+				})
+			)
 			return {
 				ok: {
 					status: 'upload',
 					allocated: size,
 					link,
-					url: url.toString(),
+					url,
 				},
 			}
 		})
+
 	}
 })
 
-const createServer = async () => {
+// TODO introduce server context object
+const createServer = async (context: any, env: Env) => {
 	const storedDelegations: Server.API.Delegation[] = []
 	return Server.create({
-		id: await idPromise,
+		id: context.signer,
 		codec: CAR.inbound,
-		service: createService({
-			url: new URL('https://example.com'),
-			signer: await idPromise,
-		}),
+		service: createService(env),
 		// validate all for now
 		validateAuthorization: async () => ({ ok: {} })
 	})
 }
 
-const serverPromise = createServer()
+
 
 export default {
 	async fetch (request, env, ctx): Promise<Response> {
-		const server = await serverPromise
-		if (request.body) {
+		const server = await createServer({
+			signer: Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY),
+		}, env)
+
+		if (request.method === 'POST' && request.body) {
 			const payload = {
-				body: await fromAsync(request.body),
+				body: (await fromAsync(request.body))[0],
 				headers: Object.fromEntries(request.headers)
 			}
 			const result = server.codec.accept(payload)

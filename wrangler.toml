@@ -4,6 +4,9 @@ main = "src/index.ts"
 compatibility_date = "2024-07-22"
 compatibility_flags = ["nodejs_compat"]
 
+account_id = "cae1c33213e6c4d3093a01ae8a7e24b0"
+workers_dev = true
+
 # Automatically place your workloads in an optimal location to minimize latency.
 # If you are running back-end logic in a Worker, running it closer to your back-end infrastructure
 # rather than the end user may result in better performance.
@@ -16,8 +19,11 @@ compatibility_flags = ["nodejs_compat"]
 # - https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
 # Note: Use secrets to store sensitive data.
 # - https://developers.cloudflare.com/workers/configuration/secrets/
-# [vars]
-# MY_VARIABLE = "production_value"
+[vars]
+BUCKET_NAME = "travis-fireproof-cars"
+SERVICE_ID = "did:key:z6Mkv7fM2mH4CkgWbiqmQCwUEJWHsR8EENsgPnm2UtmDeeDJ"
+ACCESS_KEY_ID = "945a5f685a2084960af89692250da0e7"
+ACCOUNT_ID = "cae1c33213e6c4d3093a01ae8a7e24b0"
 
 # Bind the Workers AI model catalog. Run machine learning models, powered by serverless GPUs, on Cloudflare’s global network
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#workers-ai
@@ -91,9 +97,9 @@ compatibility_flags = ["nodejs_compat"]
 
 # Bind an R2 Bucket. Use R2 to store arbitrarily large blobs of data, such as files.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#r2-buckets
-# [[r2_buckets]]
-# binding = "MY_BUCKET"
-# bucket_name = "my-bucket"
+[[r2_buckets]]
+binding = "MY_BUCKET"
+bucket_name = "travis-fireproof-cars"
 
 # Bind another Worker service. Use this binding to call another Worker without network overhead.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
