@@ -19,7 +19,7 @@ const carLink = parseLink(
 )
 
 describe('the fireproof UCAN service', () => {
-	it('', async () => {
+	it('should be able to store/add and get back a signed upload URL', async () => {
 		const ctx = createExecutionContext();
 		const conn = connection({
 			// @ts-ignore this error is coming from a possible mismatch between the node fetch response type and the cloudflare 
