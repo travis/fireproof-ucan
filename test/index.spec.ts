@@ -52,14 +52,20 @@ describe('the fireproof UCAN service', () => {
 		}
 
 		expect(response.out.ok).toBeTruthy()
-		console.log(response.out.ok)
+		
+		expect(response.out.ok.link.toString()).toEqual(carLink.toString())
+
+		// the URL should use https
+		expect(response.out.ok.url).match(/^https:\/\/.*$/)
+	
+		// the URL should contain the CID
+		expect(response.out.ok.url).match(new RegExp(carLink.toString()))
 	});
 
-	
-	// it('responds with Hello World! (integration style)', async () => {
-	// 	const response = await SELF.fetch('https://example.com');
-	// 	expect(await response.text()).toMatchInlineSnapshot(`"Hello World!"`);
-	// });
+
+});
+
+
 	
 it('exercises the API with a real invocation', async () => {
 	const serverId = Signer.parse("MgCbI52HESAu29h07/iTwgfJZjVDUN+mm6k6e4TF7nnDvTe0BKn8LUopGK2m/bnvEErRa378h83+3HUtFHQLleouuUqY=");
@@ -104,12 +110,3 @@ it('exercises the API with a real invocation', async () => {
 
 
 	
-		expect(response.out.ok.link.toString()).toEqual(carLink.toString())
-
-		// the URL should use https
-		expect(response.out.ok.url).match(/^https:\/\/.*$/)
-
-		// the URL should contain the CID
-		expect(response.out.ok.url).match(new RegExp(carLink.toString()))
-	});
-});
