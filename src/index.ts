@@ -123,7 +123,7 @@ export default {
 			const response = await encoder.encode(outgoing)
 			return new Response(response.body, { headers: response.headers })
 		} else {
-			throw new Error('no body!')
+			throw new Error('must post body!')
 		}
 	},
 } satisfies ExportedHandler<Env>;
