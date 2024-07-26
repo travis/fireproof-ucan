@@ -88,7 +88,17 @@ const createServer = async (context: any, env: Env) => {
 	})
 }
 
+function mergeUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
+  const totalSize = arrays.reduce((acc, e) => acc + e.length, 0);
+  const merged = new Uint8Array(totalSize);
 
+  arrays.forEach((array, i, arrays) => {
+    const offset = arrays.slice(0, i).reduce((acc, e) => acc + e.length, 0);
+    merged.set(array, offset);
+  });
+
+  return merged;
+}
 
 export default {
 	async fetch (request, env, ctx): Promise<Response> {
@@ -97,8 +107,9 @@ export default {
 		}, env)
 
 		if (request.method === 'POST' && request.body) {
+			const pieces = await fromAsync(request.body)
 			const payload = {
-				body: (await fromAsync(request.body))[0],
+				body: mergeUint8Arrays(...pieces),
 				headers: Object.fromEntries(request.headers)
 			}
 			const result = server.codec.accept(payload)
