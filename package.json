@@ -27,6 +27,7 @@
     "@web3-storage/access": "^20.0.0",
     "@web3-storage/capabilities": "^17.2.0",
     "@web3-storage/upload-api": "^18.0.2",
+    "@web3-storage/w3up-client": "^15.0.0",
     "array-from-async": "^3.0.0",
     "conf": "11.0.2",
     "multiformats": "^13.2.1"

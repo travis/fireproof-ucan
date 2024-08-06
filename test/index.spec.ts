@@ -1,15 +1,16 @@
 // test/index.spec.ts
 import { env, createExecutionContext, waitOnExecutionContext, SELF } from 'cloudflare:test';
 import { describe, it, expect } from 'vitest';
-import { connection, Agent } from '@web3-storage/access/agent';
+import { connection, Agent, AgentData } from '@web3-storage/access/agent';
 import { Store } from '@web3-storage/capabilities';
 import { Signer } from '@ucanto/principal/ed25519';
-import { delegate, parseLink } from '@ucanto/core'
-import * as Client from "@ucanto/client"
+import { parseLink } from '@ucanto/core'
+import * as UcantoClient from "@ucanto/client"
 import * as CAR from '@ucanto/transport/car'
 import * as HTTP from '@ucanto/transport/http'
 import { Link, DIDKey } from '@ucanto/interface'
-import { create } from '@web'
+import { MemoryDriver } from '@web3-storage/access/drivers/memory';
+import { create } from '@web3-storage/w3up-client'
 
 
 // For now, you'll need to do something like this to get a correctly-typed
@@ -128,11 +129,67 @@ describe('the fireproof UCAN service', () => {
 				size: 0
 			}
 		})
-		if (result.out.error){
+		if (result.out.error) {
 			throw result.out.error
 		}
 		expect(result.out.ok).toBeTruthy()
+	})
 
+	it('should work when logging in via the auth service', async () => {
+		// @ts-ignore TODO figure out how to give env the right type - currently ProvidedEnv when it should be Env
+		const serverSigner = Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY);
+		const connection = createConnection()
+		const serverAgent = await Agent.create({ principal: serverSigner }, { connection, servicePrincipal: serverSigner })
+
+		const clientAgent = await Agent.create({}, { connection, servicePrincipal: serverSigner })
+
+		// @ts-ignore we don't need the other two services TODO: fix types
+		//const client = await create({ serviceConf: { access: connection } })
+		console.log("DADDAD")
+		// const data = await AgentData.create({
+		// 	principal: await Signer.generate()
+		// }, {
+		// 	store: new MemoryDriver()
+		// })
+		console.log("FAHSDF")
+		// const client = new Client(data, {
+		// 	// @ts-ignore we don't need the other two services TODO: fix types
+		// 	serviceConf: { access: connection }
+		// })
+		const client = await create({
+			principal: await Signer.generate(),
+			store: new MemoryDriver()
+		})
+		console.log("A")
+		const account = await client.login('travis@example.com')
+		const space = await client.createSpace('test space')
+		await space.save()
+		console.log("C")
+		const recovery = await space.createRecovery(account.did())
+		console.log("D")
+		await client.capability.access.delegate({
+			space: space.did(),
+			delegations: [recovery],
+		})
+		console.log("E")
+		// const space = await serverAgent.createSpace('test space')
+		// const authorization = await space.createAuthorization(clientAgent, {
+		// 	access: {
+		// 		'store/add': {}
+		// 	},
+		// })
+		// await clientAgent.importSpaceFromDelegation(authorization)
+
+		const result = await client.agent.invokeAndExecute(Store.add, {
+			nb: {
+				link: carLink,
+				size: 0
+			}
+		})
+		if (result.out.error) {
+			throw result.out.error
+		}
+		expect(result.out.ok).toBeTruthy()
 	})
 });
 
@@ -142,7 +199,7 @@ it('exercises the API with a real invocation', async () => {
 	const carLink = parseLink('bagbaierale63ypabqutmxxbz3qg2yzcp2xhz2yairorogfptwdd5n4lsz5xa');
 
 	function connection (options = {}) {
-		return Client.connect({
+		return UcantoClient.connect({
 			id: serverId,
 			codec: CAR.outbound,
 			// @ts-ignore typing error we can fix later
