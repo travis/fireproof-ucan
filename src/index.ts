@@ -89,23 +89,15 @@ function mergeUint8Arrays (...arrays: Uint8Array[]): Uint8Array {
 const storedDelegations: Server.API.Delegation[] = []
 
 export default {
-	async fetch (request, env, ctx): Promise<Response> {
-		const { ACCOUNT_ID, ACCESS_KEY_ID, SECRET_ACCESS_KEY, BUCKET_NAME, POSTMARK_TOKEN } = env // TODO should this be bindings?
-		if (!(ACCESS_KEY_ID)) {
-			throw new Error('please set ACCESS_KEY_ID')
-		}
-		if (!(SECRET_ACCESS_KEY)) {
-			throw new Error('please set SECRET_ACCESS_KEY')
-		}
-		if (!(ACCOUNT_ID)) {
-			throw new Error('please set ACCOUNT_ID')
-		}
-		if (!(BUCKET_NAME)) {
-			throw new Error('please set BUCKET_NAME')
-		}
-		if (!(POSTMARK_TOKEN)) {
-			throw new Error('please set POSTMARK_TOKEN')
-		}
+  async fetch (request, env, ctx): Promise<Response> {
+    if (!env.ACCESS_KEY_ID) throw new Error('please set ACCESS_KEY_ID')
+    if (!env.ACCOUNT_ID) throw new Error('please set ACCOUNT_ID')
+    if (!env.BUCKET_NAME) throw new Error('please set BUCKET_NAME')
+    if (!env.FIREPROOF_SERVICE_PRIVATE_KEY) throw new Error('please set FIREPROOF_SERVICE_PRIVATE_KEY')
+    if (!env.POSTMARK_TOKEN) throw new Error('please set POSTMARK_TOKEN')
+    if (!env.SECRET_ACCESS_KEY) throw new Error('please set SECRET_ACCESS_KEY')
+    if (!env.SERVICE_ID) throw new Error('please set SERVICE_ID')
+		
 		// @ts-expect-error I think this is unused by the access service
 		const provisionsStorage: ProvisionsStorage = null
 		const context: FireproofServiceContext = {
@@ -113,13 +105,13 @@ export default {
 			url: new URL(request.url),
 			email: {
 				sendValidation: async ({ to, url }) => {
-					if (POSTMARK_TOKEN) {
+					if (env.POSTMARK_TOKEN) {
 						const rsp = await fetch('https://api.postmarkapp.com/email/withTemplate', {
 							method: 'POST',
 							headers: {
 								Accept: 'text/json',
 								'Content-Type': 'text/json',
-								'X-Postmark-Server-Token': POSTMARK_TOKEN,
+								'X-Postmark-Server-Token': env.POSTMARK_TOKEN,
 							},
 							body: JSON.stringify({
 								From: 'fireproof <noreply@fireproof.storage>',
@@ -162,10 +154,10 @@ export default {
 				}
 			},
 			agentStore: createInMemoryAgentStore(),
-			accountId: ACCOUNT_ID,
-			bucketName: BUCKET_NAME,
-			accessKeyId: ACCESS_KEY_ID,
-			secretAccessKey: SECRET_ACCESS_KEY
+			accountId: env.ACCOUNT_ID,
+			bucketName: env.BUCKET_NAME,
+			accessKeyId: env.ACCESS_KEY_ID,
+			secretAccessKey: env.SECRET_ACCESS_KEY
 		}
 		const server = await createServer(context)
 

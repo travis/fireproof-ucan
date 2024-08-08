@@ -2,12 +2,12 @@
 // by running `wrangler types`
 
 interface Env {
-	BUCKET_NAME: "travis-fireproof-cars";
-	SERVICE_ID: "did:key:z6Mkv7fM2mH4CkgWbiqmQCwUEJWHsR8EENsgPnm2UtmDeeDJ";
-	ACCESS_KEY_ID: "945a5f685a2084960af89692250da0e7";
-	ACCOUNT_ID: "cae1c33213e6c4d3093a01ae8a7e24b0";
+	ACCESS_KEY_ID: string;
+	ACCOUNT_ID: string;
+	BUCKET_NAME: string;
 	FIREPROOF_SERVICE_PRIVATE_KEY: string;
-	SECRET_ACCESS_KEY: string;
-	POSTMARK_TOKEN: string;
 	MY_BUCKET: R2Bucket;
+	POSTMARK_TOKEN: string;
+	SECRET_ACCESS_KEY: string;
+	SERVICE_ID: string;
 }
