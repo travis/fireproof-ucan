@@ -1,15 +1,14 @@
 // test/index.spec.ts
-import { env, createExecutionContext, waitOnExecutionContext, SELF } from 'cloudflare:test';
+import { env, SELF } from 'cloudflare:test';
 import { describe, it, expect } from 'vitest';
 import { connection, Agent } from '@web3-storage/access/agent';
 import { Store } from '@web3-storage/capabilities';
 import { Signer } from '@ucanto/principal/ed25519';
-import { delegate, parseLink } from '@ucanto/core'
+import { parseLink } from '@ucanto/core'
 import * as Client from "@ucanto/client"
 import * as CAR from '@ucanto/transport/car'
 import * as HTTP from '@ucanto/transport/http'
 import { Link, DIDKey } from '@ucanto/interface'
-import { create } from '@web'
 
 
 // For now, you'll need to do something like this to get a correctly-typed
@@ -20,12 +19,12 @@ const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
 export const alice = Signer.parse(
 	'MgCZT5vOnYZoVAeyjnzuJIVY9J4LNtJ+f8Js0cTPuKUpFne0BVEDJjEu6quFIU8yp91/TY/+MYK8GvlKoTDnqOCovCVM='
 )
+
 const carLink = parseLink(
 	'bagbaierale63ypabqutmxxbz3qg2yzcp2xhz2yairorogfptwdd5n4lsz5xa'
 )
 
 const createConnection = () => connection({
-	// @ts-ignore need to figure out how to type env properly
 	principal: Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY),
 	// @ts-ignore this error is coming from a possible mismatch between the node fetch response type and the cloudflare 
 	fetch: (url, options) => {
@@ -39,7 +38,7 @@ interface StoreAddParameters {
 	audience: Signer.Signer
 	with: DIDKey
 	nb: {
-		link: Link<unknown>,
+		link: Link<unknown, 514>,
 		size: number
 	}
 
@@ -52,7 +51,6 @@ async function invokeAndExecuteStoreAdd (params: StoreAddParameters) {
 		issuer,
 		audience,
 		'with': params.with,
-		// @ts-ignore annoying Link typing issue
 		nb
 	});
 
@@ -62,7 +60,6 @@ async function invokeAndExecuteStoreAdd (params: StoreAddParameters) {
 
 describe('the fireproof UCAN service', () => {
 	it('should be able to store/add and get back a signed upload URL', async () => {
-		// @ts-ignore TODO figure out how to give env the right type - currently ProvidedEnv when it should be Env
 		const serverId = Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY);
 
 		const response = await invokeAndExecuteStoreAdd({
@@ -91,7 +88,6 @@ describe('the fireproof UCAN service', () => {
 	});
 
 	it('should fail for issuers other than the server', async () => {
-		// @ts-ignore TODO figure out how to give env the right type - currently ProvidedEnv when it should be Env
 		const serverId = Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY);
 		const issuerId = await Signer.generate()
 
@@ -108,7 +104,6 @@ describe('the fireproof UCAN service', () => {
 	})
 
 	it('should succeed when using an authorized agent', async () => {
-		// @ts-ignore TODO figure out how to give env the right type - currently ProvidedEnv when it should be Env
 		const serverSigner = Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY);
 		const connection = createConnection()
 		const serverAgent = await Agent.create({ principal: serverSigner }, { connection, servicePrincipal: serverSigner })
@@ -170,8 +165,10 @@ it('exercises the API with a real invocation', async () => {
 		const response = await invocation.execute(conn);
 		expect(response.out.ok).toBeTruthy();
 	} catch (e) {
-		console.log("ERROR", e.stack);
-		console.log("-----");
+		if (e && typeof e == "object" && "stack" in e) {
+  		console.log("ERROR", e.stack);
+  		console.log("-----");
+		}
 		throw e;
 	}
 });
