@@ -73,13 +73,11 @@ const createService = (context: FireproofServiceContext) => ({
 // SERVER
 ////////////////////////////////////////
 
-// TODO introduce server context object
 const createServer = async (context: FireproofServiceContext) => {
 	return Server.create({
 		id: context.signer,
 		codec: CAR.inbound,
 		service: createService(context),
-		// validate all for now
 		validateAuthorization: async () => ({ ok: {} }),
 	});
 };
@@ -122,32 +120,30 @@ export default {
 			url: new URL(request.url),
 			email: {
 				sendValidation: async ({ to, url }) => {
-					if (env.POSTMARK_TOKEN) {
-						const rsp = await fetch('https://api.postmarkapp.com/email/withTemplate', {
-							method: 'POST',
-							headers: {
-								Accept: 'text/json',
-								'Content-Type': 'text/json',
-								'X-Postmark-Server-Token': env.POSTMARK_TOKEN,
-							},
-							body: JSON.stringify({
-								From: 'fireproof <noreply@fireproof.storage>',
-								To: to,
-								TemplateAlias: 'welcome',
-								TemplateModel: {
-									product_url: 'https://fireproof.storage',
-									product_name: 'Fireproof Storage',
-									email: to,
-									action_url: url,
-								},
-							}),
-						});
+					if (!env.POSTMARK_TOKEN) throw new Error("POSTMARK_TOKEN is not defined, can't send email");
 
-						if (!rsp.ok) {
-							throw new Error(`Send email failed with status: ${rsp.status}, body: ${await rsp.text()}`);
-						}
-					} else {
-						throw new Error("POSTMARK_TOKEN is not defined, can't send email");
+					const rsp = await fetch('https://api.postmarkapp.com/email/withTemplate', {
+						method: 'POST',
+						headers: {
+							Accept: 'text/json',
+							'Content-Type': 'text/json',
+							'X-Postmark-Server-Token': env.POSTMARK_TOKEN,
+						},
+						body: JSON.stringify({
+							From: 'fireproof <noreply@fireproof.storage>',
+							To: to,
+							TemplateAlias: 'welcome',
+							TemplateModel: {
+								product_url: 'https://fireproof.storage',
+								product_name: 'Fireproof Storage',
+								email: to,
+								action_url: url,
+							},
+						}),
+					});
+
+					if (!rsp.ok) {
+						throw new Error(`Send email failed with status: ${rsp.status}, body: ${await rsp.text()}`);
 					}
 				},
 			},
@@ -164,27 +160,28 @@ export default {
 			accessKeyId: env.ACCESS_KEY_ID,
 			secretAccessKey: env.SECRET_ACCESS_KEY,
 		};
+
 		const server = await createServer(context);
 
-		if (request.method === 'POST' && request.body) {
-			const pieces = await fromAsync(request.body);
-			const payload = {
-				body: mergeUint8Arrays(...pieces),
-				headers: Object.fromEntries(request.headers),
-			};
-			const result = server.codec.accept(payload);
-			if (result.error) {
-				throw new Error(`accept failed! ${result.error}`);
-			}
-			const { encoder, decoder } = result.ok;
-			const incoming = await decoder.decode(payload);
-			// @ts-ignore not totally sure how to fix the "unknown" casting here or check if it's needed
-			const outgoing = await Server.execute(incoming, server);
-			const response = await encoder.encode(outgoing);
-			return new Response(response.body, { headers: response.headers });
-		} else {
-			throw new Error('must post body!');
+		if (request.method !== 'POST' || !request.body) {
+			throw new Error('Server only accepts POST requests');
 		}
+
+		const pieces = await fromAsync(request.body);
+		const payload = {
+			body: mergeUint8Arrays(...pieces),
+			headers: Object.fromEntries(request.headers),
+		};
+		const result = server.codec.accept(payload);
+		if (result.error) {
+			throw new Error(`accept failed! ${result.error}`);
+		}
+		const { encoder, decoder } = result.ok;
+		const incoming = await decoder.decode(payload);
+		// @ts-ignore not totally sure how to fix the "unknown" casting here or check if it's needed
+		const outgoing = await Server.execute(incoming, server);
+		const response = await encoder.encode(outgoing);
+		return new Response(response.body, { headers: response.headers });
 	},
 } satisfies ExportedHandler<Env>;
 

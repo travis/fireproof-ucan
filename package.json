@@ -6,7 +6,8 @@
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
-		"test": "vitest",
+		"test": "vitest --exclude 'test/e2e/**/*'",
+		"test:e2e": "vitest --dir test/e2e/",
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
