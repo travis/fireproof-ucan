@@ -1,16 +1,19 @@
-import type { Env } from '../worker-configuration';
-
-import fromAsync from 'array-from-async';
 import * as Server from '@ucanto/server';
 import * as Signer from '@ucanto/principal/ed25519';
-import { CAR } from '@ucanto/transport';
 import * as Store from '@web3-storage/capabilities/store';
+
+import fromAsync from 'array-from-async';
+
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { CAR } from '@ucanto/transport';
 import { AccessServiceContext, ProvisionsStorage, DelegationsStorageQuery } from '@web3-storage/upload-api';
 import { createService as createAccessService } from '@web3-storage/upload-api/access';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { base64pad } from 'multiformats/bases/base64';
-import { createInMemoryAgentStore } from './agent-store';
+
+import type { Env } from '../worker-configuration';
+
+import { create as createAgentStore } from './stores/agents/persistent';
 
 ////////////////////////////////////////
 // TYPES
@@ -41,6 +44,7 @@ const createService = (context: FireproofServiceContext) => ({
 					secretAccessKey: context.secretAccessKey,
 				},
 			});
+
 			const { link, size } = capability.nb;
 
 			const checksum = base64pad.baseEncode(link.multihash.digest);
@@ -154,7 +158,7 @@ export default {
 				remove: async () => ({ error: new Error('rate limits not supported') }),
 			},
 			delegationsStorage,
-			agentStore: createInMemoryAgentStore(),
+			agentStore: createAgentStore(env.bucket, env.kv_store),
 			accountId: env.ACCOUNT_ID,
 			bucketName: env.BUCKET_NAME,
 			accessKeyId: env.ACCESS_KEY_ID,

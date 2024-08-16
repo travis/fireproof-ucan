@@ -29,6 +29,7 @@
 		"@web3-storage/capabilities": "^17.2.0",
 		"@web3-storage/upload-api": "^18.0.2",
 		"array-from-async": "^3.0.0",
-		"multiformats": "^13.2.1"
+		"multiformats": "^13.2.1",
+		"s3u": "^1.1.1"
 	}
 }

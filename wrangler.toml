@@ -3,8 +3,6 @@ name = "fireproof-ucan"
 main = "src/index.ts"
 compatibility_date = "2024-07-22"
 compatibility_flags = ["nodejs_compat"]
-
-account_id = "cae1c33213e6c4d3093a01ae8a7e24b0"
 workers_dev = true
 
 # Automatically place your workloads in an optimal location to minimize latency.
@@ -74,9 +72,10 @@ ACCOUNT_ID = "cae1c33213e6c4d3093a01ae8a7e24b0"
 
 # Bind a KV Namespace. Use KV as persistent storage for small key-value pairs.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#kv-namespaces
-# [[kv_namespaces]]
-# binding = "MY_KV_NAMESPACE"
-# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+[[kv_namespaces]]
+binding = "delegation_store"
+id = "554e03d2d84a46499a14608ad1ea87a9"
+preview_id = "946386b8e3524f6c887e7ea5d93f9c86"
 
 # Bind an mTLS certificate. Use to present a client certificate when communicating with another service.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#mtls-certificates
@@ -98,7 +97,7 @@ ACCOUNT_ID = "cae1c33213e6c4d3093a01ae8a7e24b0"
 # Bind an R2 Bucket. Use R2 to store arbitrarily large blobs of data, such as files.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#r2-buckets
 [[r2_buckets]]
-binding = "MY_BUCKET"
+binding = "bucket"
 bucket_name = "travis-fireproof-cars"
 
 # Bind another Worker service. Use this binding to call another Worker without network overhead.
