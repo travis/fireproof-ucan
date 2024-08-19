@@ -1,19 +1,13 @@
 import * as API from '@web3-storage/upload-api/types';
+
+import { KVNamespace, R2Bucket } from '@cloudflare/workers-types';
+import { RecordNotFound } from '@web3-storage/upload-api/errors';
 import { CAR, Invocation, Receipt } from '@ucanto/core';
 import { CID } from 'multiformats/cid';
-import { RecordNotFound } from '@web3-storage/upload-api/errors';
-import { KVNamespace, R2Bucket } from '@cloudflare/workers-types';
 
 // 🚀
 
 export const create = (bucket: R2Bucket, kv: KVNamespace) => new AgentStore(bucket, kv);
-
-// TYPES
-
-interface Model {
-	store: Record<string, CAR.Model>;
-	index: Record<string, { root: API.Link; at: string }[]>;
-}
 
 // IMPLEMENTATION
 

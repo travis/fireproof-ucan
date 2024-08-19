@@ -59,7 +59,7 @@ async function addToStore(params: {
 // TESTS
 ////////////////////////////////////////
 
-describe('the fireproof UCAN service', () => {
+describe('The fireproof UCAN service', () => {
 	it('should be able to store/add and get back a signed upload URL', async () => {
 		const serverId = Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY);
 
