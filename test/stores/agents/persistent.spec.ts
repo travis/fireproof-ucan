@@ -16,7 +16,7 @@ import { create as createStore } from '../../../src/stores/agents/persistent.js'
 
 describe('Stores / Agent / Persistent', () => {
 	it('should store an invocation', async () => {
-		const store = createStore(env.bucket, env.kv_store);
+		const store = createStore(env.bucket, env.delegation_store);
 		const id = await Signer.generate();
 
 		const invocation = Store.add.invoke({
@@ -24,7 +24,7 @@ describe('Stores / Agent / Persistent', () => {
 			issuer: id,
 			with: id.did(),
 			nb: {
-				link: parseLink('test'),
+				link: parseLink('bagbaierale63ypabqutmxxbz3qg2yzcp2xhz2yairorogfptwdd5n4lsz5xa'),
 				size: 0,
 			},
 		});
@@ -42,6 +42,6 @@ describe('Stores / Agent / Persistent', () => {
 		const delegation = await invocation.delegate();
 		const result = await store.invocations.get(delegation.link());
 
-		expect(result.ok).toEqual(invocation);
+		expect(result?.ok?.root?.cid?.toString()).toEqual(delegation.cid.toString());
 	});
 });

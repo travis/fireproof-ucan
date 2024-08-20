@@ -158,7 +158,7 @@ export default {
 				remove: async () => ({ error: new Error('rate limits not supported') }),
 			},
 			delegationsStorage,
-			agentStore: createAgentStore(env.bucket, env.kv_store),
+			agentStore: createAgentStore(env.bucket, env.delegation_store),
 			accountId: env.ACCOUNT_ID,
 			bucketName: env.BUCKET_NAME,
 			accessKeyId: env.ACCESS_KEY_ID,

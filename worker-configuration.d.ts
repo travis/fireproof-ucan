@@ -5,7 +5,7 @@ import type { KVNamespace, R2Bucket } from '@cloudflare/workers-types';
 
 export interface Env {
 	bucket: R2Bucket;
-	kv_store: KVNamespace;
+	delegation_store: KVNamespace;
 
 	ACCESS_KEY_ID: string;
 	ACCOUNT_ID: string;

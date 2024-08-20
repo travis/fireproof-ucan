@@ -30,8 +30,6 @@ class AgentStore implements API.AgentStore {
 		return this;
 	}
 
-	/**
-	 */
 	async write(message: API.ParsedAgentMessage): Promise<API.Result<API.Unit, API.WriteError<API.ParsedAgentMessage>>> {
 		const dataCid = message.data.root.cid.toString();
 
