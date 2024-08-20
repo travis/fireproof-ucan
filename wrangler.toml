@@ -73,7 +73,7 @@ ACCOUNT_ID = "cae1c33213e6c4d3093a01ae8a7e24b0"
 # Bind a KV Namespace. Use KV as persistent storage for small key-value pairs.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#kv-namespaces
 [[kv_namespaces]]
-binding = "delegation_store"
+binding = "kv_store"
 id = "554e03d2d84a46499a14608ad1ea87a9"
 preview_id = "946386b8e3524f6c887e7ea5d93f9c86"
 

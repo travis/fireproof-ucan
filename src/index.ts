@@ -7,7 +7,7 @@ import fromAsync from 'array-from-async';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { CAR } from '@ucanto/transport';
-import { AccessServiceContext, ProvisionsStorage, DelegationsStorageQuery } from '@web3-storage/upload-api';
+import { AccessServiceContext, ProvisionsStorage } from '@web3-storage/upload-api';
 import { createService as createAccessService } from '@web3-storage/upload-api/access';
 import { base64pad } from 'multiformats/bases/base64';
 
@@ -87,23 +87,6 @@ const createServer = async (context: FireproofServiceContext) => {
 };
 
 ////////////////////////////////////////
-// DELEGATION STORAGE
-////////////////////////////////////////
-
-const storedDelegations: Server.API.Delegation[] = [];
-
-const delegationsStorage = {
-	putMany: async (delegations: Server.API.Delegation[]) => {
-		storedDelegations.push(...delegations);
-		return { ok: {} };
-	},
-	count: async () => BigInt(storedDelegations.length),
-	find: async (query: DelegationsStorageQuery) => {
-		return { ok: storedDelegations.filter((delegation) => delegation.audience.did() === query.audience) };
-	},
-};
-
-////////////////////////////////////////
 // HANDLER
 ////////////////////////////////////////
 
@@ -157,8 +140,8 @@ export default {
 				list: async () => ({ ok: [] }),
 				remove: async () => ({ error: new Error('rate limits not supported') }),
 			},
-			delegationsStorage,
-			agentStore: createAgentStore(env.bucket, env.delegation_store),
+			// delegationsStorage: env,
+			agentStore: createAgentStore(env.bucket, env.kv_store),
 			accountId: env.ACCOUNT_ID,
 			bucketName: env.BUCKET_NAME,
 			accessKeyId: env.ACCESS_KEY_ID,

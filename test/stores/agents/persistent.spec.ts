@@ -11,9 +11,9 @@ import { parseLink } from '@ucanto/core';
 
 import { create as createStore } from '../../../src/stores/agents/persistent.js';
 
-describe('Stores / Agent / Persistent', () => {
+describe('Stores / Agents / Persistent', () => {
 	it('should store an invocation and a receipt', async () => {
-		const store = createStore(env.bucket, env.delegation_store);
+		const store = createStore(env.bucket, env.kv_store);
 		const id = await Signer.generate();
 
 		const invocation = await Store.add
