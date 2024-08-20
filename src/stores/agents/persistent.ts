@@ -43,7 +43,7 @@ class AgentStore implements API.AgentStore {
 
 			if (receipt) {
 				const taskCid = receipt.task.toString();
-				await this.kv.put(`invocation/${taskCid}`, JSON.stringify({ root: receipt.receipt.link().toString(), data: dataCid }));
+				await this.kv.put(`receipt/${taskCid}`, JSON.stringify({ root: receipt.receipt.link().toString(), data: dataCid }));
 			}
 		}
 
