@@ -13,6 +13,7 @@
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.4.5",
 		"@cloudflare/workers-types": "^4.20240722.0",
+		"@web3-storage/filecoin-client": "^3.3.3",
 		"typescript": "^5.5.2",
 		"vitest": "1.4.x",
 		"wrangler": "^3.60.3"
@@ -29,6 +30,7 @@
 		"@web3-storage/capabilities": "^17.2.0",
 		"@web3-storage/upload-api": "^18.0.2",
 		"array-from-async": "^3.0.0",
-		"multiformats": "^13.2.1"
+		"multiformats": "^13.2.1",
+		"s3u": "^1.1.1"
 	}
 }

@@ -1,16 +1,20 @@
-import type { Env } from '../worker-configuration';
-
-import fromAsync from 'array-from-async';
 import * as Server from '@ucanto/server';
 import * as Signer from '@ucanto/principal/ed25519';
-import { CAR } from '@ucanto/transport';
 import * as Store from '@web3-storage/capabilities/store';
-import { AccessServiceContext, ProvisionsStorage, DelegationsStorageQuery } from '@web3-storage/upload-api';
-import { createService as createAccessService } from '@web3-storage/upload-api/access';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
+import fromAsync from 'array-from-async';
+
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { CAR } from '@ucanto/transport';
+import { AccessServiceContext, ProvisionsStorage } from '@web3-storage/upload-api';
+import { createService as createAccessService } from '@web3-storage/upload-api/access';
 import { base64pad } from 'multiformats/bases/base64';
-import { createInMemoryAgentStore } from './agent-store';
+
+import type { Env } from '../worker-configuration';
+
+import { create as createAgentStore } from './stores/agents/persistent';
+import { create as createDelegationStore } from './stores/delegations/persistent';
 
 ////////////////////////////////////////
 // TYPES
@@ -41,6 +45,7 @@ const createService = (context: FireproofServiceContext) => ({
 					secretAccessKey: context.secretAccessKey,
 				},
 			});
+
 			const { link, size } = capability.nb;
 
 			const checksum = base64pad.baseEncode(link.multihash.digest);
@@ -80,23 +85,6 @@ const createServer = async (context: FireproofServiceContext) => {
 		service: createService(context),
 		validateAuthorization: async () => ({ ok: {} }),
 	});
-};
-
-////////////////////////////////////////
-// DELEGATION STORAGE
-////////////////////////////////////////
-
-const storedDelegations: Server.API.Delegation[] = [];
-
-const delegationsStorage = {
-	putMany: async (delegations: Server.API.Delegation[]) => {
-		storedDelegations.push(...delegations);
-		return { ok: {} };
-	},
-	count: async () => BigInt(storedDelegations.length),
-	find: async (query: DelegationsStorageQuery) => {
-		return { ok: storedDelegations.filter((delegation) => delegation.audience.did() === query.audience) };
-	},
 };
 
 ////////////////////////////////////////
@@ -153,8 +141,8 @@ export default {
 				list: async () => ({ ok: [] }),
 				remove: async () => ({ error: new Error('rate limits not supported') }),
 			},
-			delegationsStorage,
-			agentStore: createInMemoryAgentStore(),
+			delegationsStorage: createDelegationStore(env.bucket, env.kv_store),
+			agentStore: createAgentStore(env.bucket, env.kv_store),
 			accountId: env.ACCOUNT_ID,
 			bucketName: env.BUCKET_NAME,
 			accessKeyId: env.ACCESS_KEY_ID,
