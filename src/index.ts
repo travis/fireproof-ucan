@@ -14,6 +14,7 @@ import { base64pad } from 'multiformats/bases/base64';
 import type { Env } from '../worker-configuration';
 
 import { create as createAgentStore } from './stores/agents/persistent';
+import { create as createDelegationStore } from './stores/delegations/persistent';
 
 ////////////////////////////////////////
 // TYPES
@@ -140,7 +141,7 @@ export default {
 				list: async () => ({ ok: [] }),
 				remove: async () => ({ error: new Error('rate limits not supported') }),
 			},
-			// delegationsStorage: env,
+			delegationsStorage: createDelegationStore(env.bucket, env.kv_store),
 			agentStore: createAgentStore(env.bucket, env.kv_store),
 			accountId: env.ACCOUNT_ID,
 			bucketName: env.BUCKET_NAME,
