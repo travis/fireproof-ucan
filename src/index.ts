@@ -33,46 +33,51 @@ type FireproofServiceContext = AccessServiceContext & StoreAddContext;
 // SERVICE
 ////////////////////////////////////////
 
-const createService = (context: FireproofServiceContext) => ({
-	access: createAccessService(context),
-	store: {
-		add: Server.provide(Store.add, async ({ capability }) => {
-			const S3 = new S3Client({
-				region: 'auto',
-				endpoint: `https://${context.accountId}.r2.cloudflarestorage.com`,
-				credentials: {
-					accessKeyId: context.accessKeyId,
-					secretAccessKey: context.secretAccessKey,
-				},
-			});
+const createService = (context: FireproofServiceContext) => {
+	const S3 = new S3Client({
+		region: 'auto',
+		endpoint: `https://${context.accountId}.r2.cloudflarestorage.com`,
+		credentials: {
+			accessKeyId: context.accessKeyId,
+			secretAccessKey: context.secretAccessKey,
+		},
+	});
 
-			const { link, size } = capability.nb;
+	return {
+		access: createAccessService(context),
+		store: {
+			// The client must utilise the presigned url to upload the CAR bytes.
+			// For more info, see the `store/add` capability:
+			// https://github.com/storacha-network/w3up/blob/e53aa87/packages/capabilities/src/store.js#L41
+			add: Server.provide(Store.add, async ({ capability }) => {
+				const { link, size } = capability.nb;
 
-			const checksum = base64pad.baseEncode(link.multihash.digest);
-			const cmd = new PutObjectCommand({
-				Key: `${link}/${link}.car`,
-				Bucket: context.bucketName,
-				ChecksumSHA256: checksum,
-				ContentLength: size,
-			});
-			const expiresIn = 60 * 60 * 24; // 1 day
-			const url = new URL(
-				await getSignedUrl(S3, cmd, {
-					expiresIn,
-					unhoistableHeaders: new Set(['x-amz-checksum-sha256']),
-				}),
-			);
-			return {
-				ok: {
-					status: 'upload',
-					allocated: size,
-					link,
-					url,
-				},
-			};
-		}),
-	},
-});
+				const checksum = base64pad.baseEncode(link.multihash.digest);
+				const cmd = new PutObjectCommand({
+					Key: `${link}/${link}.car`,
+					Bucket: context.bucketName,
+					ChecksumSHA256: checksum,
+					ContentLength: size,
+				});
+				const expiresIn = 60 * 60 * 24; // 1 day
+				const url = new URL(
+					await getSignedUrl(S3, cmd, {
+						expiresIn,
+						unhoistableHeaders: new Set(['x-amz-checksum-sha256']),
+					}),
+				);
+				return {
+					ok: {
+						status: 'upload',
+						allocated: size,
+						link,
+						url,
+					},
+				};
+			}),
+		},
+	};
+};
 
 ////////////////////////////////////////
 // SERVER
@@ -83,6 +88,7 @@ const createServer = async (context: FireproofServiceContext) => {
 		id: context.signer,
 		codec: CAR.inbound,
 		service: createService(context),
+		// TODO: Authorization
 		validateAuthorization: async () => ({ ok: {} }),
 	});
 };
