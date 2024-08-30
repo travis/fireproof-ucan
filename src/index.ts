@@ -1,3 +1,5 @@
+import * as API from '@web3-storage/upload-api/types';
+import * as Json from '@ipld/dag-json';
 import * as Server from '@ucanto/server';
 import * as Signer from '@ucanto/principal/ed25519';
 import * as Store from '@web3-storage/capabilities/store';
@@ -5,13 +7,16 @@ import * as Store from '@web3-storage/capabilities/store';
 import fromAsync from 'array-from-async';
 
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { KVNamespace, R2Bucket } from '@cloudflare/workers-types';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { CAR } from '@ucanto/transport';
 import { AccessServiceContext, ProvisionsStorage } from '@web3-storage/upload-api';
 import { createService as createAccessService } from '@web3-storage/upload-api/access';
 import { base64pad } from 'multiformats/bases/base64';
+import all from 'it-all';
 
 import type { Env } from '../worker-configuration';
+import * as Clock from './capabilities/clock';
 
 import { create as createAgentStore } from './stores/agents/persistent';
 import { create as createDelegationStore } from './stores/delegations/persistent';
@@ -20,31 +25,70 @@ import { create as createDelegationStore } from './stores/delegations/persistent
 // TYPES
 ////////////////////////////////////////
 
-interface StoreAddContext {
+interface Context {
 	accessKeyId: string;
-	secretAccessKey: string;
 	accountId: string;
+	bucket: R2Bucket;
 	bucketName: string;
+	kvStore: KVNamespace;
+	secretAccessKey: string;
 }
 
-type FireproofServiceContext = AccessServiceContext & StoreAddContext;
+type FireproofServiceContext = AccessServiceContext & Context;
 
 ////////////////////////////////////////
 // SERVICE
 ////////////////////////////////////////
 
-const createService = (context: FireproofServiceContext) => {
+export type Service = ReturnType<typeof createService>;
+
+const createService = (ctx: FireproofServiceContext) => {
 	const S3 = new S3Client({
 		region: 'auto',
-		endpoint: `https://${context.accountId}.r2.cloudflarestorage.com`,
+		endpoint: `https://${ctx.accountId}.r2.cloudflarestorage.com`,
 		credentials: {
-			accessKeyId: context.accessKeyId,
-			secretAccessKey: context.secretAccessKey,
+			accessKeyId: ctx.accessKeyId,
+			secretAccessKey: ctx.secretAccessKey,
 		},
 	});
 
 	return {
-		access: createAccessService(context),
+		access: createAccessService(ctx),
+		clock: {
+			advance: Server.provide(Clock.advance, async ({ capability, invocation, context }) => {
+				// Retrieve event and decode it
+				const carBytes = await ctx.bucket.get(capability.nb.event.toString());
+				if (!carBytes) return { error: new Server.Failure('Unable to locate event bytes in store. Was the event stored?') };
+
+				const car = Server.CAR.decode(new Uint8Array(await carBytes.arrayBuffer()));
+				const blockCid = all(car.blocks.keys())[0];
+				const block = car.blocks.get(blockCid);
+				if (block === undefined) return { error: new Server.Failure('Unable to locate block in CAR file.') };
+
+				const event = Json.decode(block.bytes);
+
+				// Validate event
+				if (event === null || typeof event !== 'object') return { error: new Server.Failure('Associated clock event is not an object.') };
+				if ('data' in event === false) return { error: new Server.Failure('Associated clock event does not have the `data` property.') };
+				if ('parents' in event === false)
+					return { error: new Server.Failure('Associated clock event does not have the `parents` property.') };
+				if (Array.isArray(event.parents) === false) {
+					error: new Server.Failure('Associated clock event does not have a valid `parents` property, expected an array.');
+				}
+
+				// Possible TODO: Check if previous head is in event chain?
+
+				// Update head
+				await ctx.kvStore.put(`clock/${capability.with}`, capability.nb.event.toString());
+
+				// Fin
+				return {
+					ok: {
+						head: capability.nb.event.toString(),
+					},
+				};
+			}),
+		},
 		store: {
 			// The client must utilise the presigned url to upload the CAR bytes.
 			// For more info, see the `store/add` capability:
@@ -54,11 +98,12 @@ const createService = (context: FireproofServiceContext) => {
 
 				const checksum = base64pad.baseEncode(link.multihash.digest);
 				const cmd = new PutObjectCommand({
-					Key: `${link}/${link}.car`,
-					Bucket: context.bucketName,
+					Key: link.toString(),
+					Bucket: ctx.bucketName,
 					ChecksumSHA256: checksum,
 					ContentLength: size,
 				});
+
 				const expiresIn = 60 * 60 * 24; // 1 day
 				const url = new URL(
 					await getSignedUrl(S3, cmd, {
@@ -66,6 +111,7 @@ const createService = (context: FireproofServiceContext) => {
 						unhoistableHeaders: new Set(['x-amz-checksum-sha256']),
 					}),
 				);
+
 				return {
 					ok: {
 						status: 'upload',
@@ -83,13 +129,23 @@ const createService = (context: FireproofServiceContext) => {
 // SERVER
 ////////////////////////////////////////
 
-const createServer = async (context: FireproofServiceContext) => {
+const createServer = async (ctx: FireproofServiceContext) => {
 	return Server.create({
-		id: context.signer,
+		id: ctx.signer,
 		codec: CAR.inbound,
-		service: createService(context),
-		// TODO: Authorization
+		service: createService(ctx),
+
+		// Authorization
 		validateAuthorization: async () => ({ ok: {} }),
+
+		// Who can issue capabilities?
+		canIssue: (capability, issuer) => {
+			// if (capability.uri.protocol === "file:") {
+			//   const [did] = capability.uri.pathname.split("/")
+			//   return did === issuer
+			// }
+			return capability.with === issuer;
+		},
 	});
 };
 
@@ -98,7 +154,7 @@ const createServer = async (context: FireproofServiceContext) => {
 ////////////////////////////////////////
 
 export default {
-	async fetch(request, env, ctx): Promise<Response> {
+	async fetch(request, env, executionContext): Promise<Response> {
 		if (!env.ACCESS_KEY_ID) throw new Error('please set ACCESS_KEY_ID');
 		if (!env.ACCOUNT_ID) throw new Error('please set ACCOUNT_ID');
 		if (!env.BUCKET_NAME) throw new Error('please set BUCKET_NAME');
@@ -109,7 +165,10 @@ export default {
 
 		// @ts-expect-error I think this is unused by the access service
 		const provisionsStorage: ProvisionsStorage = null;
-		const context: FireproofServiceContext = {
+
+		// Context
+		const ctx: FireproofServiceContext = {
+			// AccessServiceContext
 			signer: Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY),
 			url: new URL(request.url),
 			email: {
@@ -143,20 +202,26 @@ export default {
 			},
 			provisionsStorage,
 			rateLimitsStorage: {
-				add: async () => ({ error: new Error('rate limits not supported') }),
+				add: async () => ({ error: new Server.Failure('Rate limits not supported') }),
 				list: async () => ({ ok: [] }),
-				remove: async () => ({ error: new Error('rate limits not supported') }),
+				remove: async () => ({ error: new Server.Failure('Rate limits not supported') }),
 			},
 			delegationsStorage: createDelegationStore(env.bucket, env.kv_store),
 			agentStore: createAgentStore(env.bucket, env.kv_store),
-			accountId: env.ACCOUNT_ID,
-			bucketName: env.BUCKET_NAME,
+
+			// Context
 			accessKeyId: env.ACCESS_KEY_ID,
+			accountId: env.ACCOUNT_ID,
+			bucket: env.bucket,
+			bucketName: env.BUCKET_NAME,
+			kvStore: env.kv_store,
 			secretAccessKey: env.SECRET_ACCESS_KEY,
 		};
 
-		const server = await createServer(context);
+		// Create server
+		const server = await createServer(ctx);
 
+		// Manage request
 		if (request.method !== 'POST' || !request.body) {
 			throw new Error('Server only accepts POST requests');
 		}
@@ -166,15 +231,24 @@ export default {
 			body: mergeUint8Arrays(...pieces),
 			headers: Object.fromEntries(request.headers),
 		};
+
 		const result = server.codec.accept(payload);
 		if (result.error) {
-			throw new Error(`accept failed! ${result.error}`);
+			throw new Error(`Accept-call failed! ${result.error}`);
 		}
+
+		// Response
 		const { encoder, decoder } = result.ok;
-		const incoming = await decoder.decode(payload);
-		// @ts-ignore not totally sure how to fix the "unknown" casting here or check if it's needed
+		const incoming = await decoder.decode<
+			Server.AgentMessage<{
+				Out: API.InferReceipts<API.Tuple<API.ServiceInvocation<API.Capability, Record<string, any>>>, Record<string, any>>;
+				In: never; // API.Tuple<API.Invocation>;
+			}>
+		>(payload);
+
 		const outgoing = await Server.execute(incoming, server);
 		const response = await encoder.encode(outgoing);
+
 		return new Response(response.body, { headers: response.headers });
 	},
 } satisfies ExportedHandler<Env>;

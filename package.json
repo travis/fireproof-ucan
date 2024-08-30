@@ -21,6 +21,7 @@
 	"dependencies": {
 		"@aws-sdk/client-s3": "^3.617.0",
 		"@aws-sdk/s3-request-presigner": "^3.617.0",
+		"@ipld/dag-json": "^10.2.2",
 		"@ucanto/core": "^10.0.1",
 		"@ucanto/interface": "^10.0.1",
 		"@ucanto/principal": "^9.0.1",
@@ -30,7 +31,7 @@
 		"@web3-storage/capabilities": "^17.2.0",
 		"@web3-storage/upload-api": "^18.0.2",
 		"array-from-async": "^3.0.0",
-		"multiformats": "^13.2.1",
-		"s3u": "^1.1.1"
+		"it-all": "^3.0.6",
+		"multiformats": "^13.2.1"
 	}
 }

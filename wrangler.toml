@@ -99,6 +99,7 @@ preview_id = "946386b8e3524f6c887e7ea5d93f9c86"
 [[r2_buckets]]
 binding = "bucket"
 bucket_name = "travis-fireproof-cars"
+preview_bucket_name = "travis-fireproof-cars" # TODO
 
 # Bind another Worker service. Use this binding to call another Worker without network overhead.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
