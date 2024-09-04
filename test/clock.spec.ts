@@ -20,7 +20,7 @@ import * as Connection from './common/connection';
 import { addToStore } from './common/store';
 
 describe('Merkle clocks', () => {
-	it('can be created, advanced and looked up', async () => {
+	it('can be created, advanced and shared', async () => {
 		const clock = await ed25519.Signer.generate();
 		const alice = Absentee.from({ id: DidMailto.fromEmail('alice@example.com') });
 		const agent = await ed25519.Signer.generate();
@@ -32,6 +32,7 @@ describe('Merkle clocks', () => {
 			issuer: clock,
 			audience: alice,
 			with: clock.did(),
+			expiration: Infinity,
 		});
 
 		// With the above clock delegation we could go a few ways:
@@ -58,15 +59,13 @@ describe('Merkle clocks', () => {
 
 		// {server} Create an attestation to accompany the above delegation which has an attestion signature.
 		// More info: https://github.com/storacha-network/specs/blob/54407171c7c2b3bb0151a9cff47e453e4419531e/w3-account.md#attestation-signature
-		const emailAttestation = await UCAN.attest
-			.invoke({
-				issuer: server,
-				audience: agent,
-				with: server.did(),
-				nb: { proof: emailDelegation.cid },
-				expiration: Infinity,
-			})
-			.delegate();
+		const emailAttestation = await UCAN.attest.delegate({
+			issuer: server,
+			audience: agent,
+			with: server.did(),
+			nb: { proof: emailDelegation.cid },
+			expiration: Infinity,
+		});
 
 		// {client} Create clock event
 		const metadataLink = parseLink('bagbaierale63ypabqutmxxbz3qg2yzcp2xhz2yairorogfptwdd5n4lsz5xa');
@@ -116,8 +115,62 @@ describe('Merkle clocks', () => {
 		const res = await invocation.execute(conn);
 
 		// Expectations
-		// console.error(res.out.error);
 		expect(res.out.error).toBeUndefined();
 		expect(res.out.ok?.head).toBe(eventCar.cid.toString());
+
+		// Share clock abilities to Bob
+		const bob = Absentee.from({ id: DidMailto.fromEmail('bob@example.com') });
+		const bobAgent = await ed25519.Signer.generate();
+
+		// {client} or {server} Delegate clock abilities to Bob
+		const aliceDelegation = await Clock.advance.delegate({
+			issuer: alice,
+			audience: bob,
+			with: clock.did(),
+			proofs: [delegation],
+			expiration: Infinity,
+		});
+
+		// The server has to acknowledge the existence of Alice
+		// (Alice gets email to confirm share to Bob)
+		const aliceAttestation = await UCAN.attest.delegate({
+			issuer: server,
+			audience: bob,
+			with: server.did(),
+			nb: { proof: aliceDelegation.cid },
+			expiration: Infinity,
+		});
+
+		// {client} or {server} Bob → Bob's agent delegation (Bob logs in)
+		const bobEmailDelegation = await UCANTO.delegate({
+			issuer: bob,
+			audience: bobAgent,
+			capabilities: [{ can: '*', with: 'ucan:*' }],
+			expiration: Infinity,
+			proofs: [aliceDelegation, aliceAttestation],
+		});
+
+		// {server}
+		const bobEmailAttestation = await UCAN.attest.delegate({
+			issuer: server,
+			audience: bobAgent,
+			with: server.did(),
+			nb: { proof: bobEmailDelegation.cid },
+			expiration: Infinity,
+		});
+
+		// {client} Bob advances the clock
+		const bobInvocation = Clock.advance.invoke({
+			issuer: bobAgent,
+			audience: server,
+			with: clock.did(),
+			nb: { event: eventCar.cid },
+			proofs: [bobEmailAttestation, bobEmailDelegation],
+		});
+
+		const bobRes = await bobInvocation.execute(conn);
+		if (bobRes.out.error) console.log(bobRes.out.error.message);
+		expect(bobRes.out.error).toBeUndefined();
+		expect(bobRes.out.ok?.head).toBe(eventCar.cid.toString());
 	});
 });
