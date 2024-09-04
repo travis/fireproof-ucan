@@ -1,13 +1,13 @@
 import { env, SELF } from 'cloudflare:test';
 import { describe, it, expect } from 'vitest';
 
-import { Agent, connection } from '@web3-storage/access/agent';
+import { Agent } from '@web3-storage/access/agent';
 import { Store } from '@web3-storage/capabilities';
 import { Signer } from '@ucanto/principal/ed25519';
 import { parseLink } from '@ucanto/core';
-import { Link, DIDKey } from '@ucanto/interface';
 
-import { IncomingRequest } from './request';
+import { create as createConnection } from './common/connection';
+import { addToStore } from './common/store';
 
 ////////////////////////////////////////
 // SETUP
@@ -17,49 +17,11 @@ import { IncomingRequest } from './request';
 export const alice = Signer.parse('MgCZT5vOnYZoVAeyjnzuJIVY9J4LNtJ+f8Js0cTPuKUpFne0BVEDJjEu6quFIU8yp91/TY/+MYK8GvlKoTDnqOCovCVM=');
 const carLink = parseLink('bagbaierale63ypabqutmxxbz3qg2yzcp2xhz2yairorogfptwdd5n4lsz5xa');
 
-/**
- * Create a W3S access connection.
- */
-export const createConnection = () =>
-	connection({
-		principal: Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY),
-		// @ts-ignore this error is coming from a possible mismatch between the node fetch response type and the cloudflare
-		fetch: (url, options) => {
-			// @ts-ignore I think this is just an articact of the funky typing we're doing here
-			return SELF.fetch(new IncomingRequest(url, options));
-		},
-	});
-
-/**
- * Invoke & execute a `Store.Add` capability.
- */
-async function addToStore(params: {
-	issuer: Signer.Signer;
-	audience: Signer.Signer;
-	with: DIDKey;
-	nb: {
-		link: Link<unknown, 514>;
-		size: number;
-	};
-}) {
-	const { issuer, audience, nb } = params;
-	const conn = createConnection();
-	const invocation = Store.add.invoke({
-		issuer,
-		audience,
-		with: params.with,
-		nb,
-	});
-
-	// @ts-ignore this is happening because we're using the access client's connection function - TODO get the types right above to fix
-	return await invocation.execute(conn);
-}
-
 ////////////////////////////////////////
 // TESTS
 ////////////////////////////////////////
 
-describe('The fireproof UCAN service', () => {
+describe('The Fireproof UCAN service', () => {
 	it('should be able to store/add and get back a signed upload URL', async () => {
 		const serverId = Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY);
 
