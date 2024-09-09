@@ -11,13 +11,13 @@ import { CID } from 'multiformats';
 import { Absentee, ed25519 } from '@ucanto/principal';
 import { Signer } from '@ucanto/principal/ed25519';
 import { parseLink } from '@ucanto/core';
-import { sha256 } from 'multiformats/hashes/sha2';
 
 import * as Clock from '../src/capabilities/clock';
 import { create as createDelegationStore } from '../src/stores/delegations/persistent.js';
 
 import * as Connection from './common/connection';
 import { addToStore } from './common/store';
+import { sha256 } from 'multiformats/hashes/sha2';
 
 describe('Merkle clocks', () => {
 	it('can be created, advanced and shared', async () => {
@@ -25,6 +25,10 @@ describe('Merkle clocks', () => {
 		const alice = Absentee.from({ id: DidMailto.fromEmail('alice@example.com') });
 		const agent = await ed25519.Signer.generate();
 		const server = Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY);
+
+		// console.log('✨ CLOCK', clock.did());
+		// console.log('✨ ALICE', alice.did());
+		// console.log('✨ AGENT', agent.did());
 
 		// {client} The clock belongs to Alice,
 		// delegate the capability to them.
@@ -54,7 +58,6 @@ describe('Merkle clocks', () => {
 			audience: agent,
 			capabilities: [{ can: '*', with: 'ucan:*' }],
 			expiration: Infinity,
-			proofs: await delegationStore.find({ audience: alice.did() }).then((a) => a.ok),
 		});
 
 		// {server} Create an attestation to accompany the above delegation which has an attestion signature.
@@ -115,6 +118,7 @@ describe('Merkle clocks', () => {
 		const res = await invocation.execute(conn);
 
 		// Expectations
+		if (res.out.error) console.error(res.out.error?.message);
 		expect(res.out.error).toBeUndefined();
 		expect(res.out.ok?.head).toBe(eventCar.cid.toString());
 
@@ -141,13 +145,14 @@ describe('Merkle clocks', () => {
 			expiration: Infinity,
 		});
 
+		await delegationStore.putMany([aliceDelegation, aliceAttestation]);
+
 		// {client} or {server} Bob → Bob's agent delegation (Bob logs in)
 		const bobEmailDelegation = await UCANTO.delegate({
 			issuer: bob,
 			audience: bobAgent,
 			capabilities: [{ can: '*', with: 'ucan:*' }],
 			expiration: Infinity,
-			proofs: [aliceDelegation, aliceAttestation],
 		});
 
 		// {server}

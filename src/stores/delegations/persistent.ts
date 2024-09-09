@@ -38,7 +38,7 @@ class DelegationStore implements API.DelegationsStorage {
 				if (result.error) throw result.error;
 
 				const car = result.ok;
-				const link = (await CAR.link(car)).toString();
+				const link = d.cid.toString();
 				const record: KVRecord = {
 					data: link,
 

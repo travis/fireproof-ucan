@@ -13,6 +13,8 @@ import { CAR } from '@ucanto/transport';
 import { AccessServiceContext, ProvisionsStorage } from '@web3-storage/upload-api';
 import { createService as createAccessService } from '@web3-storage/upload-api/access';
 import { base64pad } from 'multiformats/bases/base64';
+import { UnavailableProof } from '@ucanto/validator';
+import { extract } from '@ucanto/core/delegation';
 import all from 'it-all';
 
 import type { Env } from '../worker-configuration';
@@ -20,6 +22,7 @@ import * as Clock from './capabilities/clock';
 
 import { create as createAgentStore } from './stores/agents/persistent';
 import { create as createDelegationStore } from './stores/delegations/persistent';
+import { provideConstructor } from './provide';
 
 ////////////////////////////////////////
 // TYPES
@@ -52,10 +55,19 @@ const createService = (ctx: FireproofServiceContext) => {
 		},
 	});
 
+	const provide = provideConstructor({
+		// Provide additional delegations from store
+		fromStore: async (audience: `did:key:${string}` | `did:mailto:${string}`) => {
+			const result = await ctx.delegationsStorage.find({ audience });
+			if (result.ok) return result.ok;
+			return [];
+		},
+	});
+
 	return {
 		access: createAccessService(ctx),
 		clock: {
-			advance: Server.provide(Clock.advance, async ({ capability, invocation, context }) => {
+			advance: provide(Clock.advance, async ({ capability, invocation, context }) => {
 				// Retrieve event and decode it
 				const carBytes = await ctx.bucket.get(capability.nb.event.toString());
 				if (!carBytes) return { error: new Server.Failure('Unable to locate event bytes in store. Was the event stored?') };
@@ -93,7 +105,7 @@ const createService = (ctx: FireproofServiceContext) => {
 			// The client must utilise the presigned url to upload the CAR bytes.
 			// For more info, see the `store/add` capability:
 			// https://github.com/storacha-network/w3up/blob/e53aa87/packages/capabilities/src/store.js#L41
-			add: Server.provide(Store.add, async ({ capability }) => {
+			add: provide(Store.add, async ({ capability }) => {
 				const { link, size } = capability.nb;
 
 				const checksum = base64pad.baseEncode(link.multihash.digest);
@@ -135,8 +147,19 @@ const createServer = async (ctx: FireproofServiceContext) => {
 		codec: CAR.inbound,
 		service: createService(ctx),
 
-		// Authorization
+		// Manage revocations
 		validateAuthorization: async () => ({ ok: {} }),
+
+		// Resolve proofs referenced by CID
+		resolve: async (proof) => {
+			const data = await ctx.bucket.get(proof.toString());
+			if (!data) return { error: new UnavailableProof(proof) };
+
+			const result = await extract(new Uint8Array(await data.arrayBuffer()));
+			if (result.error) return { error: new UnavailableProof(proof, result.error) };
+
+			return { ok: result.ok };
+		},
 
 		// Who can issue capabilities?
 		canIssue: (capability, issuer) => {
