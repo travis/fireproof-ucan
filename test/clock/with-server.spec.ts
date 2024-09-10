@@ -1,14 +1,12 @@
 import { describe, it, expect } from 'vitest';
 
 import * as Client from './client';
-import * as Clock from '../../src/capabilities/clock';
 import { parseLink } from '@ucanto/core';
 
 import { alice, server } from '../common/personas';
-import { conn } from '../common/connection';
 
 describe('Merkle clocks', () => {
-	describe('With server', () => {
+	describe('Successes', () => {
 		it('can be registered on the server', async () => {
 			const clock = await Client.createClock({ audience: alice });
 			const res = await Client.registerClock({ clock });
@@ -57,6 +55,31 @@ describe('Merkle clocks', () => {
 			expect(advancement.out.ok?.head).toBe(event.cid.toString());
 			expect(resAfter.out.ok?.head).toBe(advancement.out.ok?.head);
 		});
-		it.todo('can use the clock on a second device authenticating with email');
+		it('can use the clock on a second device authenticating with email', async () => {
+			const clock = await Client.createClock({ audience: alice });
+			await Client.registerClock({ clock });
+
+			const agentA = await Client.authenticatedAgent({ account: alice });
+			const resA = await Client.getClockHead({ agent: agentA, clock });
+
+			expect(resA.out.error).toBe(undefined);
+
+			const agentB = await Client.authenticatedAgent({ account: alice });
+			const resB = await Client.getClockHead({ agent: agentB, clock });
+
+			expect(resB.out.error).toBe(undefined);
+		});
+	});
+
+	describe('Failures', () => {
+		it('cannot be used on the server without registering', async () => {
+			// Reason: The server doesn't have the genesis delegation of the clock,
+			//         so the `ucan:*` capability does not find it in the delegation store.
+			const clock = await Client.createClock({ audience: alice });
+			const agent = await Client.authenticatedAgent({ account: alice });
+			const res = await Client.getClockHead({ agent, clock });
+
+			expect(res.out.error).not.toBeUndefined();
+		});
 	});
 });
