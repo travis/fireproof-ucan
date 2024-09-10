@@ -100,6 +100,13 @@ const createService = (ctx: FireproofServiceContext) => {
 					},
 				};
 			}),
+			head: provide(Clock.head, async ({ capability }) => {
+				const head = await ctx.kvStore.get(`clock/${capability.with}`);
+
+				return {
+					ok: { head: head || undefined },
+				};
+			}),
 			register: provide(Clock.register, async ({ capability, invocation, context }) => {
 				// This basically only exists to store the clock's genesis delegation on the server.
 				if (invocation.proofs[0]?.link().toString() === capability.nb.proof.toString()) {
