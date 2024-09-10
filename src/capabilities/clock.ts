@@ -1,9 +1,9 @@
-import { DID, URI, Link } from '@ucanto/core/schema';
+import { DID, Link } from '@ucanto/core/schema';
 import { capability, Schema } from '@ucanto/server';
 
 export const clock = capability({
 	can: 'clock/*',
-	with: URI.match({ protocol: 'did:' }),
+	with: DID.match({ method: 'key' }),
 });
 
 /**
@@ -11,7 +11,7 @@ export const clock = capability({
  */
 export const advance = capability({
 	can: 'clock/advance',
-	with: URI.match({ protocol: 'did:' }),
+	with: DID.match({ method: 'key' }),
 	nb: Schema.struct({
 		// CAR file CID containing the event.
 		// Data format: https://github.com/storacha-network/specs/blob/e04e53f/w3-clock.md#data-format
@@ -24,5 +24,16 @@ export const advance = capability({
  */
 export const head = capability({
 	can: 'clock/head',
-	with: URI.match({ protocol: 'did:' }),
+	with: DID.match({ method: 'key' }),
+});
+
+/**
+ * Register a clock, storing the genesis delegation.
+ */
+export const register = capability({
+	can: 'clock/register',
+	with: DID.match({ method: 'key' }),
+	nb: Schema.struct({
+		proof: Link.match({ version: 1 }),
+	}),
 });

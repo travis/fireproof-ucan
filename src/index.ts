@@ -1,5 +1,5 @@
 import * as API from '@web3-storage/upload-api/types';
-import * as Json from '@ipld/dag-json';
+import * as Json from 'multiformats/codecs/json';
 import * as Server from '@ucanto/server';
 import * as Signer from '@ucanto/principal/ed25519';
 import * as Store from '@web3-storage/capabilities/store';
@@ -99,6 +99,20 @@ const createService = (ctx: FireproofServiceContext) => {
 						head: capability.nb.event.toString(),
 					},
 				};
+			}),
+			register: provide(Clock.register, async ({ capability, invocation, context }) => {
+				// This basically only exists to store the clock's genesis delegation on the server.
+				if (invocation.proofs[0]?.link().toString() === capability.nb.proof.toString()) {
+					const delegations = invocation.proofs.filter((proof) => {
+						return 'archive' in proof;
+					});
+
+					await ctx.delegationsStorage.putMany(delegations, { cause: invocation.link() });
+
+					return { ok: {} };
+				} else {
+					return { error: new Server.Failure('Proof linked in capability does not match proof in invocation') };
+				}
 			}),
 		},
 		store: {

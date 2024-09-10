@@ -18,3 +18,5 @@ export const create = () =>
 			return SELF.fetch(new IncomingRequest(url, options));
 		},
 	});
+
+export const conn = create();
