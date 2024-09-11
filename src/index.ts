@@ -6,15 +6,17 @@ import * as Store from '@web3-storage/capabilities/store';
 
 import fromAsync from 'array-from-async';
 
+import { Message } from '@ucanto/core';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { KVNamespace, R2Bucket } from '@cloudflare/workers-types';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { CAR } from '@ucanto/transport';
-import { AccessServiceContext, ProvisionsStorage } from '@web3-storage/upload-api';
+import { AccessServiceContext, AccessConfirm, ProvisionsStorage } from '@web3-storage/upload-api';
 import { createService as createAccessService } from '@web3-storage/upload-api/access';
 import { base64pad } from 'multiformats/bases/base64';
 import { UnavailableProof } from '@ucanto/validator';
 import { extract } from '@ucanto/core/delegation';
+import { stringToDelegation } from '@web3-storage/access/encoding';
 import all from 'it-all';
 
 import type { Env } from '../worker-configuration';
@@ -210,15 +212,19 @@ export default {
 		// @ts-expect-error I think this is unused by the access service
 		const provisionsStorage: ProvisionsStorage = null;
 
+		// Parse URL
+		const url = new URL(request.url);
+
 		// Context
 		const ctx: FireproofServiceContext = {
 			// AccessServiceContext
 			signer: Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY),
-			url: new URL(request.url),
+			url,
 			email: {
 				sendValidation: async ({ to, url }) => {
 					if (!env.POSTMARK_TOKEN) throw new Error("POSTMARK_TOKEN is not defined, can't send email");
 
+					const email = env.EMAIL || 'no-reply@fireproof.storage';
 					const rsp = await fetch('https://api.postmarkapp.com/email/withTemplate', {
 						method: 'POST',
 						headers: {
@@ -227,7 +233,7 @@ export default {
 							'X-Postmark-Server-Token': env.POSTMARK_TOKEN,
 						},
 						body: JSON.stringify({
-							From: 'fireproof <noreply@fireproof.storage>',
+							From: `fireproof <${email}>`,
 							To: to,
 							TemplateAlias: 'welcome',
 							TemplateModel: {
@@ -265,7 +271,13 @@ export default {
 		// Create server
 		const server = await createServer(ctx);
 
-		// Manage request
+		// Validate email if asked so
+		if (request.method === 'GET' && url.pathname === '/validate-email') {
+			await validateEmail({ url, request, server });
+			return new Response('Email validated successfully.', { headers: { ContentType: 'text/html' } });
+		}
+
+		// Otherwise manage UCANTO RPC request
 		if (request.method !== 'POST' || !request.body) {
 			throw new Error('Server only accepts POST requests');
 		}
@@ -281,7 +293,7 @@ export default {
 			throw new Error(`Accept-call failed! ${result.error}`);
 		}
 
-		// Response
+		// Decode incoming invocations, execute them and render response
 		const { encoder, decoder } = result.ok;
 		const incoming = await decoder.decode<
 			Server.AgentMessage<{
@@ -309,4 +321,27 @@ function mergeUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
 	});
 
 	return merged;
+}
+
+async function validateEmail({ url, request, server }: { url: URL; request: Request; server: API.ServerView<Service> }) {
+	const delegation = stringToDelegation(url.searchParams.get('ucan') ?? '');
+
+	if (delegation.capabilities.length !== 1 || delegation.capabilities[0].can !== 'access/confirm') {
+		throw new Error(`Invalidate delegation in validate-email confirmation url`);
+	}
+
+	const confirm = delegation as API.Invocation<AccessConfirm>;
+	const message = (await Message.build({
+		invocations: [confirm],
+	})) as Server.AgentMessage<{
+		Out: API.InferReceipts<API.Tuple<API.ServiceInvocation<API.Capability, Record<string, any>>>, Record<string, any>>;
+		In: never; // API.Tuple<API.Invocation>;
+	}>;
+
+	const result = server.codec.accept({
+		body: new Uint8Array(),
+		headers: Object.fromEntries(request.headers),
+	});
+
+	const _outgoing = await Server.execute(message, server);
 }

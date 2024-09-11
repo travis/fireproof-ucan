@@ -1,5 +1,6 @@
 import { DIDKey, Link, Signer } from '@ucanto/principal/ed25519';
 import { Store } from '@web3-storage/capabilities';
+import { env } from 'cloudflare:test';
 
 import { create as createConnection } from './connection';
 
@@ -26,4 +27,11 @@ export async function addToStore(params: {
 
 	// @ts-ignore this is happening because we're using the access client's connection function - TODO get the types right above to fix
 	return await invocation.execute(conn);
+}
+
+/**
+ * Add data to the server store.
+ */
+export async function storeOnServer(cid: Link, bytes: Uint8Array) {
+	await env.bucket.put(cid.toString(), bytes);
 }

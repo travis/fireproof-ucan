@@ -11,6 +11,7 @@ export interface Env {
 	ACCOUNT_ID: string;
 	BUCKET_NAME: string;
 	CLOUDFLARE_API_TOKEN: string;
+	EMAIL: string;
 	FIREPROOF_SERVICE_PRIVATE_KEY: string;
 	POSTMARK_TOKEN: string;
 	SECRET_ACCESS_KEY: string;

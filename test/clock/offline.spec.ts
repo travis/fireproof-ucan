@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import * as Client from './client';
-import { alice, bob } from '../common/personas';
+import * as Client from '../common/client';
+import { alice, bob, server } from '../common/personas';
 
 describe('Merkle clocks', () => {
 	describe('Offline', () => {
@@ -13,17 +13,27 @@ describe('Merkle clocks', () => {
 
 		it('can be shared offline, with an email address (which might, or might not, be server user)', async () => {
 			const genesis = await Client.createClock({ audience: alice });
-			const share = await Client.shareClock({ audience: bob, clock: genesis.did(), genesisClockDelegation: genesis.delegation });
+			const share = await Client.shareClock({
+				audience: bob,
+				clock: genesis.did(),
+				genesisClockDelegation: genesis.delegation,
+				issuer: alice,
+			});
 
 			expect(share.delegation.proofs[0].link().toString()).toEqual(genesis.delegation.link().toString());
 		});
 
 		it('can be shared offline, having proof of email addresses using logged in agents', async () => {
 			const genesis = await Client.createClock({ audience: alice });
-			const share = await Client.shareClock({ audience: bob, clock: genesis.did(), genesisClockDelegation: genesis.delegation });
+			const share = await Client.shareClock({
+				audience: bob,
+				clock: genesis.did(),
+				genesisClockDelegation: genesis.delegation,
+				issuer: alice,
+			});
 
-			const agentAlice = await Client.authenticatedAgent({ account: alice });
-			const agentBob = await Client.authenticatedAgent({ account: bob });
+			const agentAlice = await Client.authenticatedAgent({ account: alice, server });
+			const agentBob = await Client.authenticatedAgent({ account: bob, server });
 
 			// Bob can verify the share was actually made by Alice if both have an authenticated agent.
 			// 1st, verify if Bob and Alice are using the same source of truth.

@@ -15,7 +15,7 @@ import {
 	DelegationError,
 	Failure,
 	MalformedCapability,
-	DIDResolutionError as DIDKeyResolutionError,
+	DIDKeyResolutionError as DIDResolutionError,
 	li,
 } from './error';
 
@@ -32,7 +32,7 @@ export {
 	UnavailableProof,
 	Unauthorized,
 	MalformedCapability,
-	DIDKeyResolutionError as DIDResolutionError,
+	DIDResolutionError as DIDKeyResolutionError,
 };
 
 /**

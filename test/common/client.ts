@@ -1,16 +1,15 @@
-import * as CAR from '@ucanto/core/car';
 import * as Json from 'multiformats/codecs/json';
+import * as DU from '@ipld/dag-ucan';
 import * as UCAN from '@web3-storage/capabilities/ucan';
 import * as UCANTO from '@ucanto/server';
 import { Block } from 'multiformats/block';
+import { CID } from 'multiformats';
 import { Delegation, DID, Link, Signer } from '@ucanto/interface';
+import { Service } from '../../src/index';
 import { ed25519 } from '@ucanto/principal';
-import { env } from 'cloudflare:test';
 import { sha256 } from 'multiformats/hashes/sha2';
 
 import * as ClockCaps from '../../src/capabilities/clock';
-import { alice, server } from '../common/personas';
-import { conn } from '../common/connection';
 
 export type Agent = {
 	attestation: Delegation;
@@ -24,7 +23,19 @@ export type Clock = {
 	signer: Signer<DID<'key'>>;
 };
 
-export async function advanceClock({ agent, clock, event }: { agent: Agent; clock: Clock; event: UCANTO.Block }) {
+export async function advanceClock({
+	agent,
+	clock,
+	connection,
+	event,
+	server,
+}: {
+	agent: Agent;
+	clock: Clock;
+	connection: UCANTO.ConnectionView<Service>;
+	event: UCANTO.Block;
+	server: Signer<DID<'key'>>;
+}) {
 	const invocation = ClockCaps.advance.invoke({
 		issuer: agent.signer,
 		audience: server,
@@ -33,7 +44,7 @@ export async function advanceClock({ agent, clock, event }: { agent: Agent; cloc
 		proofs: [agent.delegation, agent.attestation],
 	});
 
-	return await invocation.execute(conn);
+	return await invocation.execute(connection);
 }
 
 /**
@@ -41,7 +52,7 @@ export async function advanceClock({ agent, clock, event }: { agent: Agent; cloc
  * This represents an agent after it went through the login flow.
  * (`access/*` capabilities)
  */
-export async function authenticatedAgent({ account }: { account: typeof alice }): Promise<Agent> {
+export async function authenticatedAgent({ account, server }: { account: DU.Signer; server: Signer<DID<'key'>> }): Promise<Agent> {
 	const signer = await ed25519.Signer.generate();
 
 	// Delegate all capabilities to the agent.
@@ -75,7 +86,7 @@ export async function authenticatedAgent({ account }: { account: typeof alice })
  * Create a clock.
  * Audience is always a `did:mailto` DID.
  */
-export async function createClock({ audience }: { audience: typeof alice }): Promise<Clock> {
+export async function createClock({ audience }: { audience: DU.Signer }): Promise<Clock> {
 	const signer = await ed25519.Signer.generate();
 	const delegation = await ClockCaps.clock.delegate({
 		issuer: signer,
@@ -98,14 +109,24 @@ export async function createClockEvent({ messageCid }: { messageCid: Link }) {
 	const eventData = { metadata: messageCid };
 	const event = { parents: [], data: eventData };
 	const eventBytes = Json.encode(event);
-	const eventLink = UCANTO.Link.create(Json.code, await sha256.digest(eventBytes));
+	const eventLink = CID.create(1, Json.code, await sha256.digest(eventBytes));
 
 	return await UCANTO.CAR.write({
 		roots: [new Block({ cid: eventLink, bytes: eventBytes, value: event })],
 	});
 }
 
-export async function getClockHead({ agent, clock }: { agent: Agent; clock: Clock }) {
+export async function getClockHead({
+	agent,
+	clock,
+	connection,
+	server,
+}: {
+	agent: Agent;
+	clock: Clock;
+	connection: UCANTO.ConnectionView<Service>;
+	server: Signer<DID<'key'>>;
+}) {
 	const invocation = ClockCaps.head.invoke({
 		issuer: agent.signer,
 		audience: server,
@@ -113,13 +134,21 @@ export async function getClockHead({ agent, clock }: { agent: Agent; clock: Cloc
 		proofs: [agent.delegation, agent.attestation],
 	});
 
-	return await invocation.execute(conn);
+	return await invocation.execute(connection);
 }
 
 /**
  * Register a clock.
  */
-export async function registerClock({ clock }: { clock: Clock }) {
+export async function registerClock({
+	clock,
+	connection,
+	server,
+}: {
+	clock: Clock;
+	connection: UCANTO.ConnectionView<Service>;
+	server: Signer<DID<'key'>>;
+}) {
 	const invocation = ClockCaps.register.invoke({
 		issuer: clock.signer,
 		audience: server,
@@ -128,7 +157,7 @@ export async function registerClock({ clock }: { clock: Clock }) {
 		proofs: [clock.delegation],
 	});
 
-	return await invocation.execute(conn);
+	return await invocation.execute(connection);
 }
 
 /**
@@ -138,14 +167,16 @@ export async function registerClock({ clock }: { clock: Clock }) {
 export async function shareClock({
 	audience,
 	clock,
+	issuer,
 	genesisClockDelegation,
 }: {
-	audience: typeof alice;
+	audience: DU.Signer;
 	clock: DID<'key'>;
+	issuer: DU.Signer;
 	genesisClockDelegation: Delegation;
 }) {
 	const delegation = await ClockCaps.clock.delegate({
-		issuer: alice,
+		issuer,
 		audience,
 		with: clock,
 		proofs: [genesisClockDelegation],
@@ -153,11 +184,4 @@ export async function shareClock({
 	});
 
 	return { delegation };
-}
-
-/**
- * Add data to the server store.
- */
-export async function storeOnServer(cid: Link, bytes: Uint8Array) {
-	await env.bucket.put(cid.toString(), bytes);
 }
