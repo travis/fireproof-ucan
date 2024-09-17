@@ -1,9 +1,11 @@
+import { env } from 'cloudflare:test';
 import { describe, it, expect } from 'vitest';
 
-import * as Client from '../common/client';
 import { parseLink } from '@ucanto/core';
 
-import { alice, server } from '../common/personas';
+import * as Client from '../common/client';
+import { create as createDelegationStore } from '../../src/stores/delegations/persistent';
+import { alice, bob, server } from '../common/personas';
 import { storeOnServer } from '../common/store';
 import { conn } from '../common/connection';
 
@@ -23,7 +25,7 @@ describe('Merkle clocks', () => {
 			const clock = await Client.createClock({ audience: alice });
 			await Client.registerClock({ clock, connection, server });
 
-			const agent = await Client.authenticatedAgent({ account: alice, server });
+			const agent = await Client.authorizedAgent({ account: alice, server });
 			const event = await Client.createClockEvent({
 				messageCid: parseLink('bagbaierale63ypabqutmxxbz3qg2yzcp2xhz2yairorogfptwdd5n4lsz5xa'),
 			});
@@ -38,7 +40,7 @@ describe('Merkle clocks', () => {
 			const clock = await Client.createClock({ audience: alice });
 			await Client.registerClock({ clock, connection, server });
 
-			const agent = await Client.authenticatedAgent({ account: alice, server });
+			const agent = await Client.authorizedAgent({ account: alice, server });
 			const resBefore = await Client.getClockHead({ agent, clock, connection, server });
 
 			// Clock hasn't been advanced yet
@@ -63,18 +65,57 @@ describe('Merkle clocks', () => {
 			const clock = await Client.createClock({ audience: alice });
 			await Client.registerClock({ clock, connection, server });
 
-			const agentA = await Client.authenticatedAgent({ account: alice, server });
+			const agentA = await Client.authorizedAgent({ account: alice, server });
 			const resA = await Client.getClockHead({ agent: agentA, clock, connection, server });
 
 			expect(resA.out.error).toBe(undefined);
 
-			const agentB = await Client.authenticatedAgent({ account: alice, server });
+			const agentB = await Client.authorizedAgent({ account: alice, server });
 			const resB = await Client.getClockHead({ agent: agentB, clock, connection, server });
 
 			expect(resB.out.error).toBe(undefined);
 		});
-		it.todo('can confirm a clock share using the server');
-		it.todo('can advance a clock as a receiver from a share');
+		it('can advance a clock as a receiver from a share', async () => {
+			const clock = await Client.createClock({ audience: alice });
+			await Client.registerClock({ clock, connection, server });
+
+			// Delegation chain:
+			// Clock → Alice → Bob
+			const share = await Client.shareClock({
+				issuer: alice,
+				audience: bob,
+				clock: clock.did(),
+				genesisClockDelegation: clock.delegation,
+			});
+
+			const { attestation } = await Client.authorizedShare({
+				audience: bob,
+				server,
+				share,
+			});
+
+			// Normally the email flow will take care of this
+			const delStore = createDelegationStore(env.bucket, env.kv_store);
+			await delStore.putMany([share.delegation, attestation]);
+
+			// Advance clock as Bob
+			const agentBob = await Client.authorizedAgent({ account: bob, server });
+			const event = await Client.createClockEvent({
+				messageCid: parseLink('bagbaierale63ypabqutmxxbz3qg2yzcp2xhz2yairorogfptwdd5n4lsz5xa'),
+			});
+
+			await storeOnServer(event.cid, event.bytes);
+			const advancement = await Client.advanceClock({
+				agent: agentBob,
+				clock,
+				connection,
+				event,
+				server,
+			});
+
+			if (advancement.out.error) console.error(advancement.out.error);
+			expect(advancement.out.ok).not.toBeUndefined();
+		});
 	});
 
 	describe('Failures', () => {
@@ -82,7 +123,7 @@ describe('Merkle clocks', () => {
 			// Reason: The server doesn't have the genesis delegation of the clock,
 			//         so the `ucan:*` capability does not find it in the delegation store.
 			const clock = await Client.createClock({ audience: alice });
-			const agent = await Client.authenticatedAgent({ account: alice, server });
+			const agent = await Client.authorizedAgent({ account: alice, server });
 			const res = await Client.getClockHead({ agent, clock, connection, server });
 
 			expect(res.out.error).not.toBeUndefined();

@@ -17,11 +17,6 @@ workers_dev = true
 # - https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
 # Note: Use secrets to store sensitive data.
 # - https://developers.cloudflare.com/workers/configuration/secrets/
-[vars]
-BUCKET_NAME = "travis-fireproof-cars"
-SERVICE_ID = "did:key:z6Mkv7fM2mH4CkgWbiqmQCwUEJWHsR8EENsgPnm2UtmDeeDJ"
-ACCESS_KEY_ID = "945a5f685a2084960af89692250da0e7"
-ACCOUNT_ID = "cae1c33213e6c4d3093a01ae8a7e24b0"
 
 # Bind the Workers AI model catalog. Run machine learning models, powered by serverless GPUs, on Cloudflare’s global network
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#workers-ai
@@ -74,8 +69,8 @@ ACCOUNT_ID = "cae1c33213e6c4d3093a01ae8a7e24b0"
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#kv-namespaces
 [[kv_namespaces]]
 binding = "kv_store"
-id = "554e03d2d84a46499a14608ad1ea87a9"
-preview_id = "946386b8e3524f6c887e7ea5d93f9c86"
+id = "844ded5b13d94e42ae8fa7d35b852499"
+preview_id = "09580587738b4a42940b4c690aa15b85"
 
 # Bind an mTLS certificate. Use to present a client certificate when communicating with another service.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#mtls-certificates
@@ -98,8 +93,8 @@ preview_id = "946386b8e3524f6c887e7ea5d93f9c86"
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#r2-buckets
 [[r2_buckets]]
 binding = "bucket"
-bucket_name = "travis-fireproof-cars"
-preview_bucket_name = "travis-fireproof-cars" # TODO
+bucket_name = "fireproof"
+preview_bucket_name = "fireproof-preview"
 
 # Bind another Worker service. Use this binding to call another Worker without network overhead.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings

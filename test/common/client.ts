@@ -24,12 +24,14 @@ export type Clock = {
 };
 
 export async function advanceClock({
+	additionalProofs,
 	agent,
 	clock,
 	connection,
 	event,
 	server,
 }: {
+	additionalProofs?: UCANTO.Proof<DU.Capabilities>[];
 	agent: Agent;
 	clock: Clock;
 	connection: UCANTO.ConnectionView<Service>;
@@ -41,18 +43,18 @@ export async function advanceClock({
 		audience: server,
 		with: clock.did(),
 		nb: { event: event.cid },
-		proofs: [agent.delegation, agent.attestation],
+		proofs: [agent.delegation, agent.attestation, ...(additionalProofs || [])],
 	});
 
 	return await invocation.execute(connection);
 }
 
 /**
- * Construct an authenticated agent.
+ * Construct an authorized agent.
  * This represents an agent after it went through the login flow.
  * (`access/*` capabilities)
  */
-export async function authenticatedAgent({ account, server }: { account: DU.Signer; server: Signer<DID<'key'>> }): Promise<Agent> {
+export async function authorizedAgent({ account, server }: { account: DU.Signer; server: Signer<DID<'key'>> }): Promise<Agent> {
 	const signer = await ed25519.Signer.generate();
 
 	// Delegate all capabilities to the agent.
@@ -80,6 +82,31 @@ export async function authenticatedAgent({ account, server }: { account: DU.Sign
 		delegation,
 		signer,
 	};
+}
+
+/**
+ * Construct an authorized share.
+ * This represents a share after it went through the email flow.
+ * It's basically the server acknowledging the share delegation is valid.
+ */
+export async function authorizedShare({
+	audience,
+	server,
+	share,
+}: {
+	audience: DU.Signer;
+	server: Signer<DID<'key'>>;
+	share: { delegation: Delegation };
+}) {
+	const attestation = await UCAN.attest.delegate({
+		issuer: server,
+		audience,
+		with: server.did(),
+		nb: { proof: share.delegation.cid },
+		expiration: Infinity,
+	});
+
+	return { attestation };
 }
 
 /**

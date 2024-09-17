@@ -20,6 +20,31 @@ export const advance = capability({
 });
 
 /**
+ * Confirm a clock share, storing the sharing delegation and initiating the associated email flow.
+ */
+export const authorizeShare = capability({
+	can: 'clock/authorize-share',
+	with: DID.match({ method: 'key' }),
+	nb: Schema.struct({
+		iss: DID.match({ method: 'mailto' }),
+		proof: Link.match({ version: 1 }),
+		recipient: DID.match({ method: 'mailto' }),
+	}),
+});
+
+/**
+ * Confirm a clock share.
+ */
+export const confirmShare = capability({
+	can: 'clock/confirm-share',
+	with: DID.match(),
+	nb: Schema.struct({
+		// Link to authorize invocation
+		cause: Link.match({ version: 1 }),
+	}),
+});
+
+/**
  * List the CIDs of the events at the head of this clock.
  */
 export const head = capability({

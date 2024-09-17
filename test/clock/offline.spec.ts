@@ -32,8 +32,8 @@ describe('Merkle clocks', () => {
 				issuer: alice,
 			});
 
-			const agentAlice = await Client.authenticatedAgent({ account: alice, server });
-			const agentBob = await Client.authenticatedAgent({ account: bob, server });
+			const agentAlice = await Client.authorizedAgent({ account: alice, server });
+			const agentBob = await Client.authorizedAgent({ account: bob, server });
 
 			// Bob can verify the share was actually made by Alice if both have an authenticated agent.
 			// 1st, verify if Bob and Alice are using the same source of truth.

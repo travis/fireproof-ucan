@@ -1,8 +1,10 @@
 import * as API from '@web3-storage/upload-api/types';
+import * as DidMailto from '@web3-storage/did-mailto';
 import * as Json from 'multiformats/codecs/json';
 import * as Server from '@ucanto/server';
 import * as Signer from '@ucanto/principal/ed25519';
 import * as Store from '@web3-storage/capabilities/store';
+import * as UCAN from '@web3-storage/capabilities/ucan';
 
 import fromAsync from 'array-from-async';
 
@@ -16,11 +18,12 @@ import { createService as createAccessService } from '@web3-storage/upload-api/a
 import { base64pad } from 'multiformats/bases/base64';
 import { UnavailableProof } from '@ucanto/validator';
 import { extract } from '@ucanto/core/delegation';
-import { stringToDelegation } from '@web3-storage/access/encoding';
+import { delegationToString, stringToDelegation } from '@web3-storage/access/encoding';
 import all from 'it-all';
 
 import type { Env } from '../worker-configuration';
 import * as Clock from './capabilities/clock';
+import * as Email from './email';
 
 import { create as createAgentStore } from './stores/agents/persistent';
 import { create as createDelegationStore } from './stores/delegations/persistent';
@@ -35,7 +38,9 @@ interface Context {
 	accountId: string;
 	bucket: R2Bucket;
 	bucketName: string;
+	emailAddress?: string;
 	kvStore: KVNamespace;
+	postmarkToken: string;
 	secretAccessKey: string;
 }
 
@@ -69,7 +74,7 @@ const createService = (ctx: FireproofServiceContext) => {
 	return {
 		access: createAccessService(ctx),
 		clock: {
-			advance: provide(Clock.advance, async ({ capability, invocation, context }) => {
+			advance: provide(Clock.advance, async ({ capability }) => {
 				// Retrieve event and decode it
 				const carBytes = await ctx.bucket.get(capability.nb.event.toString());
 				if (!carBytes) return { error: new Server.Failure('Unable to locate event bytes in store. Was the event stored?') };
@@ -101,6 +106,82 @@ const createService = (ctx: FireproofServiceContext) => {
 						head: capability.nb.event.toString(),
 					},
 				};
+			}),
+			'authorize-share': provide(Clock.authorizeShare, async ({ capability, invocation }) => {
+				const accountDID = capability.nb.iss;
+				const email = DidMailto.toEmail(DidMailto.fromString(accountDID));
+
+				if (invocation.proofs[0]?.link().toString() !== capability.nb.proof.toString()) {
+					return { error: new Server.Failure('Proof linked in capability does not match proof in invocation') };
+				}
+
+				// Store share delegation (account A → account B)
+				// This one is useless without an attestation,
+				// which we'll acquire through the email flow.
+				const delegations = invocation.proofs.filter((proof) => {
+					return 'archive' in proof;
+				});
+
+				await ctx.delegationsStorage.putMany(delegations, { cause: invocation.link() });
+
+				// Start email flow
+				const confirmation = await Clock.confirmShare
+					.invoke({
+						issuer: ctx.signer,
+						audience: ctx.signer,
+						with: ctx.signer.did(),
+						lifetimeInSeconds: 60 * 60 * 24 * 2, // 2 days
+						nb: {
+							cause: invocation.cid,
+						},
+					})
+					.delegate();
+
+				const encoded = delegationToString(confirmation);
+				const url = `${ctx.url.protocol}//${ctx.url.host}/validate-email?ucan=${encoded}&mode=share`;
+
+				await Email.send({
+					postmarkToken: ctx.postmarkToken,
+					recipient: email,
+					sender: ctx.emailAddress,
+					template: 'confirm-share',
+					templateData: {
+						product_url: 'https://fireproof.storage',
+						product_name: 'Fireproof Storage',
+						email: email,
+						action_url: url,
+					},
+				});
+
+				return { ok: {} };
+			}),
+			'confirm-share': provide(Clock.confirmShare, async ({ capability, invocation }) => {
+				const causeLink = capability.nb.cause;
+
+				// Extra info from causal invocation
+				const causeResult = await ctx.agentStore.invocations.get(causeLink);
+				if (causeResult.error) return { error: causeResult.error };
+
+				const cause = causeResult.ok;
+				const nb: any = cause.capabilities[0]?.nb;
+				if (!nb) return { error: new Error('Unable to retrieve capabilities from cause') };
+
+				const proof = nb.proof;
+				const audience = nb.recipient;
+
+				// Create attestation & store it
+				const attestation = await UCAN.attest.delegate({
+					issuer: ctx.signer,
+					audience,
+					with: ctx.signer.did(),
+					nb: { proof },
+					expiration: Infinity,
+				});
+
+				await ctx.delegationsStorage.putMany([attestation]);
+
+				// Fin
+				return { ok: {} };
 			}),
 			head: provide(Clock.head, async ({ capability }) => {
 				const head = await ctx.kvStore.get(`clock/${capability.with}`);
@@ -135,7 +216,7 @@ const createService = (ctx: FireproofServiceContext) => {
 				const cmd = new PutObjectCommand({
 					Key: link.toString(),
 					Bucket: ctx.bucketName,
-					ChecksumSHA256: checksum,
+					// TODO: ChecksumSHA256: checksum,
 					ContentLength: size,
 				});
 
@@ -222,32 +303,18 @@ export default {
 			url,
 			email: {
 				sendValidation: async ({ to, url }) => {
-					if (!env.POSTMARK_TOKEN) throw new Error("POSTMARK_TOKEN is not defined, can't send email");
-
-					const email = env.EMAIL || 'no-reply@fireproof.storage';
-					const rsp = await fetch('https://api.postmarkapp.com/email/withTemplate', {
-						method: 'POST',
-						headers: {
-							Accept: 'text/json',
-							'Content-Type': 'text/json',
-							'X-Postmark-Server-Token': env.POSTMARK_TOKEN,
+					await Email.send({
+						postmarkToken: env.POSTMARK_TOKEN,
+						recipient: to,
+						sender: env.EMAIL,
+						template: 'welcome',
+						templateData: {
+							product_url: 'https://fireproof.storage',
+							product_name: 'Fireproof Storage',
+							email: to,
+							action_url: url,
 						},
-						body: JSON.stringify({
-							From: `fireproof <${email}>`,
-							To: to,
-							TemplateAlias: 'welcome',
-							TemplateModel: {
-								product_url: 'https://fireproof.storage',
-								product_name: 'Fireproof Storage',
-								email: to,
-								action_url: url,
-							},
-						}),
 					});
-
-					if (!rsp.ok) {
-						throw new Error(`Send email failed with status: ${rsp.status}, body: ${await rsp.text()}`);
-					}
 				},
 			},
 			provisionsStorage,
@@ -264,7 +331,9 @@ export default {
 			accountId: env.ACCOUNT_ID,
 			bucket: env.bucket,
 			bucketName: env.BUCKET_NAME,
+			emailAddress: env.EMAIL,
 			kvStore: env.kv_store,
+			postmarkToken: env.POSTMARK_TOKEN,
 			secretAccessKey: env.SECRET_ACCESS_KEY,
 		};
 
@@ -326,22 +395,37 @@ function mergeUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
 async function validateEmail({ url, request, server }: { url: URL; request: Request; server: API.ServerView<Service> }) {
 	const delegation = stringToDelegation(url.searchParams.get('ucan') ?? '');
 
-	if (delegation.capabilities.length !== 1 || delegation.capabilities[0].can !== 'access/confirm') {
+	if (delegation.capabilities.length !== 1) {
 		throw new Error(`Invalidate delegation in validate-email confirmation url`);
 	}
 
-	const confirm = delegation as API.Invocation<AccessConfirm>;
+	const can = delegation.capabilities[0].can;
+	let invocation;
+
+	switch (can) {
+		case 'access/confirm':
+			invocation = delegation as API.Invocation<AccessConfirm>;
+			break;
+
+		case 'clock/confirm-share':
+			invocation = delegation as API.Invocation<Server.InferInvokedCapability<typeof Clock.confirmShare>>;
+			break;
+
+		default:
+			throw new Error(`Invalidate delegation in validate-email confirmation url`);
+	}
+
 	const message = (await Message.build({
-		invocations: [confirm],
+		invocations: [invocation],
 	})) as Server.AgentMessage<{
 		Out: API.InferReceipts<API.Tuple<API.ServiceInvocation<API.Capability, Record<string, any>>>, Record<string, any>>;
 		In: never; // API.Tuple<API.Invocation>;
 	}>;
 
-	const result = server.codec.accept({
+	server.codec.accept({
 		body: new Uint8Array(),
 		headers: Object.fromEntries(request.headers),
 	});
 
-	const _outgoing = await Server.execute(message, server);
+	await Server.execute(message, server);
 }

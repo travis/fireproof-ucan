@@ -15,25 +15,14 @@ import {
 	DelegationError,
 	Failure,
 	MalformedCapability,
-	DIDKeyResolutionError as DIDResolutionError,
+	DIDKeyResolutionError,
 	li,
 } from './error';
 
 export { capability } from '@ucanto/validator';
 export * from '@ucanto/core/schema';
 
-export {
-	Schema,
-	Authorization,
-	Failure,
-	fail,
-	ok,
-	Revoked,
-	UnavailableProof,
-	Unauthorized,
-	MalformedCapability,
-	DIDResolutionError as DIDKeyResolutionError,
-};
+export { Schema, Authorization, Failure, fail, ok, Revoked, UnavailableProof, Unauthorized, MalformedCapability, DIDKeyResolutionError };
 
 /**
  * @typedef {(audience: `did:key:${string}` | `did:mailto:${string}`) => Promise<API.Delegation<API.Capabilities>[]>} DelegationStoreGetter
