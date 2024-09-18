@@ -18,7 +18,7 @@ import { createService as createAccessService } from '@web3-storage/upload-api/a
 import { base64pad } from 'multiformats/bases/base64';
 import { UnavailableProof } from '@ucanto/validator';
 import { extract } from '@ucanto/core/delegation';
-import { delegationToString, stringToDelegation } from '@web3-storage/access/encoding';
+import { delegationsToBytes, delegationToString, stringToDelegation } from '@web3-storage/access/encoding';
 import all from 'it-all';
 
 import type { Env } from '../worker-configuration';
@@ -108,7 +108,7 @@ const createService = (ctx: FireproofServiceContext) => {
 				};
 			}),
 			'authorize-share': provide(Clock.authorizeShare, async ({ capability, invocation }) => {
-				const accountDID = capability.nb.iss;
+				const accountDID = capability.nb.issuer;
 				const email = DidMailto.toEmail(DidMailto.fromString(accountDID));
 
 				if (invocation.proofs[0]?.link().toString() !== capability.nb.proof.toString()) {
@@ -144,16 +144,101 @@ const createService = (ctx: FireproofServiceContext) => {
 					postmarkToken: ctx.postmarkToken,
 					recipient: email,
 					sender: ctx.emailAddress,
-					template: 'confirm-share',
+					template: 'share',
 					templateData: {
 						product_url: 'https://fireproof.storage',
 						product_name: 'Fireproof Storage',
 						email: email,
+						email_share_recipient: DidMailto.toEmail(DidMailto.fromString(capability.nb.recipient)),
 						action_url: url,
 					},
 				});
 
 				return { ok: {} };
+			}),
+			'claim-share': provide(Clock.claimShare, async ({ capability }) => {
+				const shareLink = capability.nb.proof.toString();
+
+				// Find attestation for the confirmation of the share
+				const resA = await ctx.delegationsStorage.find({ audience: capability.nb.issuer });
+				if (resA.error) return { error: resA.error };
+
+				const attestation = resA.ok.find((d) => {
+					const cap = d.capabilities[0];
+					return cap && d.issuer.did() === ctx.signer.did() && cap.can === 'ucan/attest' && (cap.nb as any).proof.toString() === shareLink;
+				});
+				if (!attestation) return { ok: { delegations: {} } };
+
+				// Find share delegation
+				const resB = await ctx.delegationsStorage.find({ audience: capability.nb.recipient });
+				if (resB.error) return { error: resB.error };
+
+				const delegation = resB.ok.find((d) => {
+					return d.cid.toString() === shareLink;
+				});
+
+				if (!delegation) return { ok: { delegations: {} } };
+
+				// Fin
+				return {
+					ok: {
+						delegations: {
+							[attestation.cid.toString()]: delegationsToBytes([attestation]),
+							[delegation.cid.toString()]: delegationsToBytes([delegation]),
+						},
+					},
+				};
+			}),
+			'claim-shares': provide(Clock.claimShares, async ({ capability }) => {
+				// Find share attestations
+				const resA = await ctx.delegationsStorage.find({ audience: capability.nb.issuer });
+				if (resA.error) return { error: resA.error };
+
+				const attestations = resA.ok.filter((d) => {
+					const cap = d.capabilities[0];
+					return cap && d.issuer.did() === ctx.signer.did() && cap.can === 'ucan/attest';
+				});
+
+				// Recipient delegations
+				const resB = await ctx.delegationsStorage.find({ audience: capability.nb.recipient });
+				if (resB.error) return { error: resB.error };
+
+				type DelegationType = (typeof resB.ok)[number];
+
+				const delegations = resB.ok.reduce((acc: Record<string, DelegationType>, del: DelegationType) => {
+					acc[del.cid.toString()] = del;
+					return acc;
+				}, {});
+
+				// Find associated share delegations
+				const items = (
+					await Promise.all(
+						attestations.map(async (att) => {
+							const cap = att.capabilities[0];
+							const delegation = cap && delegations[(cap.nb as any).proof.toString()];
+							if (!delegation) return null;
+
+							return {
+								attestation: att,
+								delegation,
+							};
+						}),
+					)
+				).filter((a) => a !== null);
+
+				// Fin
+				return {
+					ok: {
+						delegations: Object.fromEntries(
+							items.flatMap((item) => {
+								return [
+									[item.attestation.cid.toString(), delegationsToBytes([item.attestation])],
+									[item.delegation.cid.toString(), delegationsToBytes([item.delegation])],
+								];
+							}),
+						),
+					},
+				};
 			}),
 			'confirm-share': provide(Clock.confirmShare, async ({ capability, invocation }) => {
 				const causeLink = capability.nb.cause;
@@ -288,7 +373,6 @@ export default {
 		if (!env.FIREPROOF_SERVICE_PRIVATE_KEY) throw new Error('please set FIREPROOF_SERVICE_PRIVATE_KEY');
 		if (!env.POSTMARK_TOKEN) throw new Error('please set POSTMARK_TOKEN');
 		if (!env.SECRET_ACCESS_KEY) throw new Error('please set SECRET_ACCESS_KEY');
-		if (!env.SERVICE_ID) throw new Error('please set SERVICE_ID');
 
 		// @ts-expect-error I think this is unused by the access service
 		const provisionsStorage: ProvisionsStorage = null;
@@ -296,10 +380,13 @@ export default {
 		// Parse URL
 		const url = new URL(request.url);
 
+		// Signer
+		const signer = Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY);
+
 		// Context
 		const ctx: FireproofServiceContext = {
 			// AccessServiceContext
-			signer: Signer.parse(env.FIREPROOF_SERVICE_PRIVATE_KEY),
+			signer,
 			url,
 			email: {
 				sendValidation: async ({ to, url }) => {
@@ -307,7 +394,7 @@ export default {
 						postmarkToken: env.POSTMARK_TOKEN,
 						recipient: to,
 						sender: env.EMAIL,
-						template: 'welcome',
+						template: 'login',
 						templateData: {
 							product_url: 'https://fireproof.storage',
 							product_name: 'Fireproof Storage',
@@ -344,6 +431,10 @@ export default {
 		if (request.method === 'GET' && url.pathname === '/validate-email') {
 			await validateEmail({ url, request, server });
 			return new Response('Email validated successfully.', { headers: { ContentType: 'text/html' } });
+		}
+
+		if (request.method === 'GET' && url.pathname === '/did') {
+			return new Response(signer.did(), { headers: { ContentType: 'text/html' } });
 		}
 
 		// Otherwise manage UCANTO RPC request
@@ -427,5 +518,7 @@ async function validateEmail({ url, request, server }: { url: URL; request: Requ
 		headers: Object.fromEntries(request.headers),
 	});
 
-	await Server.execute(message, server);
+	const resp = await Server.execute(message, server);
+	const err = Array.from(resp.receipts).find(([_, r]) => !!r.out.error)?.[1]?.out?.error;
+	if (err) throw err;
 }

@@ -24,14 +24,12 @@ export type Clock = {
 };
 
 export async function advanceClock({
-	additionalProofs,
 	agent,
 	clock,
 	connection,
 	event,
 	server,
 }: {
-	additionalProofs?: UCANTO.Proof<DU.Capabilities>[];
 	agent: Agent;
 	clock: Clock;
 	connection: UCANTO.ConnectionView<Service>;
@@ -43,7 +41,7 @@ export async function advanceClock({
 		audience: server,
 		with: clock.did(),
 		nb: { event: event.cid },
-		proofs: [agent.delegation, agent.attestation, ...(additionalProofs || [])],
+		proofs: [agent.delegation, agent.attestation],
 	});
 
 	return await invocation.execute(connection);

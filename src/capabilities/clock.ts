@@ -20,14 +20,39 @@ export const advance = capability({
 });
 
 /**
- * Confirm a clock share, storing the sharing delegation and initiating the associated email flow.
+ * Initiate a clock-share authorization, storing the sharing delegation and initiating the associated email flow.
  */
 export const authorizeShare = capability({
 	can: 'clock/authorize-share',
 	with: DID.match({ method: 'key' }),
 	nb: Schema.struct({
-		iss: DID.match({ method: 'mailto' }),
+		issuer: DID.match({ method: 'mailto' }),
 		proof: Link.match({ version: 1 }),
+		recipient: DID.match({ method: 'mailto' }),
+	}),
+});
+
+/**
+ * Claim a clock share.
+ */
+export const claimShare = capability({
+	can: 'clock/claim-share',
+	with: DID.match({ method: 'key' }).or(DID.match({ method: 'mailto' })),
+	nb: Schema.struct({
+		issuer: DID.match({ method: 'mailto' }),
+		proof: Link.match({ version: 1 }),
+		recipient: DID.match({ method: 'mailto' }),
+	}),
+});
+
+/**
+ * Claim all clock shares.
+ */
+export const claimShares = capability({
+	can: 'clock/claim-shares',
+	with: DID.match({ method: 'key' }).or(DID.match({ method: 'mailto' })),
+	nb: Schema.struct({
+		issuer: DID.match({ method: 'mailto' }),
 		recipient: DID.match({ method: 'mailto' }),
 	}),
 });

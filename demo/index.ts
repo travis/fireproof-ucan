@@ -5,14 +5,17 @@ import * as HTTP from '@ucanto/transport/http';
 import * as W3 from '@web3-storage/w3up-client';
 import { Absentee } from '@ucanto/principal';
 import { ParsedArgs } from 'minimist';
-import { Service } from '../src/index';
 import { Store as StoreCapabilities } from '@web3-storage/capabilities';
 import { Signer } from '@ucanto/principal/ed25519';
 import { connect } from '@ucanto/client';
 import { parseLink } from '@ucanto/core';
 import minimist from 'minimist';
 
+import * as ClockCapabilities from '../src/capabilities/clock';
+import { Service } from '../src/index';
+
 import * as Client from '../test/common/client';
+import { bytesToDelegations } from '@web3-storage/access/encoding';
 
 // PREP
 
@@ -24,15 +27,15 @@ if (!email) throw new Error('`email` flag is required');
 
 const persona = Absentee.from({ id: DidMailto.fromEmail(email) });
 
-// TODO: Use env var
-const server = Signer.parse('MgCZc476L5pn6Kiw5YdLHEy5CHZgw5gRWxNj/UcLRQoxaHu0BREgGEsI7N8cQxjO6fdgA/lEAphNmR/um1DEfmBTBByY=');
+if (!process.env.FIREPROOF_SERVICE_PRIVATE_KEY) {
+	throw new Error('Service private key not found in environment');
+}
+
+const server = Signer.parse(process.env.FIREPROOF_SERVICE_PRIVATE_KEY);
+console.log('Server ID', server.did());
 const connection = Agent.connection<`did:key:${string}`, Service>({
 	principal: server,
 	url: HOST,
-	fetch: (url, options) => {
-		console.log('🔮', url, options);
-		return fetch(url, options);
-	},
 });
 
 const service = connect<any>({
@@ -62,7 +65,9 @@ if (registration.out.error) process.exit(1);
 
 // LOGIN / AUTHORISE USING EMAIL
 // NOTE: Could opt for the simpler `@web3-storage/access` package instead using the whole w3up package.
+console.log('Waiting for main account to login ...');
 const account = await w3.login(email);
+console.log('👮 Agent', account.agent.did());
 console.log(
 	'🤹 Account proofs',
 	account.proofs.map((p) => p.capabilities),
@@ -88,17 +93,17 @@ const event = await Client.createClockEvent({
 	messageCid: parseLink('bagbaierale63ypabqutmxxbz3qg2yzcp2xhz2yairorogfptwdd5n4lsz5xa'),
 });
 
-const storeInvocation = StoreCapabilities.add.invoke({
-	issuer: agent.signer,
-	audience: server,
-	with: agent.signer.did(),
-	nb: {
-		link: event.cid,
-		size: event.bytes.length,
-	},
-});
-
-const storeResp = await storeInvocation.execute(connection);
+const storeResp = await StoreCapabilities.add
+	.invoke({
+		issuer: agent.signer,
+		audience: server,
+		with: agent.signer.did(),
+		nb: {
+			link: event.cid,
+			size: event.bytes.length,
+		},
+	})
+	.execute(connection);
 
 console.log('📦 store/add', storeResp.out);
 if (storeResp.out.error) process.exit(1);
@@ -134,8 +139,8 @@ if (head.out.error) process.exit(1);
 
 // SHARE TO BOB
 
-if (!args.shareEmail) process.exit(0);
-const sharePersona = Absentee.from({ id: DidMailto.fromEmail(args.shareEmail) });
+if (!args['share-email']) process.exit(0);
+const sharePersona = Absentee.from({ id: DidMailto.fromEmail(args['share-email']) });
 
 const share = await Client.shareClock({
 	issuer: persona,
@@ -143,6 +148,8 @@ const share = await Client.shareClock({
 	clock: clock.did(),
 	genesisClockDelegation: clock.delegation,
 });
+
+console.log('🫴 Shared clock to', sharePersona.did());
 
 // BOB CAN VERIFY ALICE USING AN ATTESTATION FROM THE SERVER
 // NOTE: See tests for more details about the flow
@@ -155,7 +162,8 @@ const w3Bob = await W3.create({
 	},
 });
 
-const accountBob = await w3Bob.login(args.shareEmail);
+console.log('Waiting for share-receiver account to login ...');
+const accountBob = await w3Bob.login(args['share-email']);
 
 const attestationAlice = attestation;
 const delegationAlice = delegation;
@@ -167,6 +175,12 @@ if (!attestationBob || !delegationBob) {
 	console.error('Unable to locate agent attestion or delegation');
 	process.exit(1);
 }
+
+const agentBob = {
+	attestation: attestationBob,
+	delegation: delegationBob,
+	signer: accountBob.agent.issuer,
+};
 
 const aliceIsVerifiedOffline = (() => {
 	// @ts-ignore
@@ -182,3 +196,72 @@ const aliceIsVerifiedOffline = (() => {
 console.log('Offline verification of Alice, verified:', aliceIsVerifiedOffline);
 
 // SHARER CAN USE CLOCK ABILITIES ON THE SERVER
+
+// (1) ALICE HAS TO AUTHORIZE/CONFIRM THE SHARE
+
+const authorizeShareResp = await ClockCapabilities.authorizeShare
+	.invoke({
+		issuer: agent.signer,
+		audience: server,
+		with: agent.signer.did(),
+		nb: {
+			issuer: persona.did(),
+			recipient: sharePersona.did(),
+			proof: share.delegation.cid,
+		},
+		proofs: [share.delegation],
+	})
+	.execute(connection);
+
+console.log('🫴 Share authorization', authorizeShareResp.out);
+if (authorizeShareResp.out.error) process.exit(1);
+
+// (2) WAIT UNTIL SHARER CONFIRMS SHARE
+
+const claim = async () => {
+	const resp = await ClockCapabilities.claimShare
+		.invoke({
+			issuer: accountBob.agent.issuer,
+			audience: server,
+			with: accountBob.did(),
+			nb: {
+				issuer: persona.did(), // Sharer
+				recipient: sharePersona.did(), // Receiver
+				proof: share.delegation.cid,
+			},
+			proofs: [agentBob.attestation, agentBob.delegation],
+		})
+		.execute(connection);
+
+	console.log(resp.out);
+	if (resp.out.error) throw resp.out.error;
+
+	return Object.values(resp.out.ok.delegations).flatMap((proof) => bytesToDelegations(proof));
+};
+
+const poll = async () => {
+	const proofs = await claim();
+
+	const attestation = proofs.find((p) => p.capabilities[0].can === 'ucan/attest');
+
+	if (!attestation) {
+		await new Promise((resolve) => {
+			setTimeout(resolve, 1000);
+		});
+
+		return await poll();
+	}
+
+	return attestation;
+};
+
+console.log('Waiting for share confirmation ...');
+const shareConfirmation = await poll();
+console.log('✅ Share confirmed', shareConfirmation);
+
+// (3) USE CLOCK ABILITY
+
+const headBob = await Client.getClockHead({ agent: agentBob, clock, connection, server });
+
+console.log('⏰ Clock head (Bob)', headBob.out);
+if (headBob.out.error) process.exit(1);
