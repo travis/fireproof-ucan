@@ -223,7 +223,7 @@ const claim = async () => {
 		.invoke({
 			issuer: accountBob.agent.issuer,
 			audience: server,
-			with: accountBob.did(),
+			with: agentBob.signer.did(),
 			nb: {
 				issuer: persona.did(), // Sharer
 				recipient: sharePersona.did(), // Receiver

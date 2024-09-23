@@ -135,7 +135,7 @@ const resolveSources = async ({ delegation }, config) => {
 	const { delegations, errors: failedProofs } = await resolveProofs(delegation.proofs, config);
 
 	// Locate additional delegations in store if special `ucan:*` capability is invoked
-	const allDelegations =
+	let allDelegations =
 		delegation.capabilities.some((cap) => cap.with === 'ucan:*') && config.fromStore !== undefined
 			? [...delegations, ...(await config.fromStore(delegation.issuer.did()))]
 			: delegations;

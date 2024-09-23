@@ -13,6 +13,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { KVNamespace, R2Bucket } from '@cloudflare/workers-types';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { CAR } from '@ucanto/transport';
+import { AgentMessage } from '@web3-storage/upload-api';
 import { AccessServiceContext, AccessConfirm, ProvisionsStorage } from '@web3-storage/upload-api';
 import { createService as createAccessService } from '@web3-storage/upload-api/access';
 import { base64pad } from 'multiformats/bases/base64';
@@ -140,33 +141,46 @@ const createService = (ctx: FireproofServiceContext) => {
 				const encoded = delegationToString(confirmation);
 				const url = `${ctx.url.protocol}//${ctx.url.host}/validate-email?ucan=${encoded}&mode=share`;
 
-				await Email.send({
-					postmarkToken: ctx.postmarkToken,
-					recipient: email,
-					sender: ctx.emailAddress,
-					template: 'share',
-					templateData: {
-						product_url: 'https://fireproof.storage',
-						product_name: 'Fireproof Storage',
-						email: email,
-						email_share_recipient: DidMailto.toEmail(DidMailto.fromString(capability.nb.recipient)),
-						action_url: url,
-					},
+				if (ctx.emailAddress)
+					await Email.send({
+						postmarkToken: ctx.postmarkToken,
+						recipient: email,
+						sender: ctx.emailAddress,
+						template: 'share',
+						templateData: {
+							product_url: 'https://fireproof.storage',
+							product_name: 'Fireproof Storage',
+							email: email,
+							email_share_recipient: DidMailto.toEmail(DidMailto.fromString(capability.nb.recipient)),
+							action_url: url,
+						},
+					});
+
+				// Store invocation
+				const message = await Message.build({
+					invocations: [invocation],
 				});
 
-				return { ok: {} };
+				await ctx.agentStore.messages.write({
+					data: message,
+					source: CAR.request.encode(message),
+					index: AgentMessage.index(message),
+				});
+
+				return { ok: { url } };
 			}),
 			'claim-share': provide(Clock.claimShare, async ({ capability }) => {
 				const shareLink = capability.nb.proof.toString();
 
 				// Find attestation for the confirmation of the share
-				const resA = await ctx.delegationsStorage.find({ audience: capability.nb.issuer });
+				const resA = await ctx.delegationsStorage.find({ audience: capability.nb.recipient });
 				if (resA.error) return { error: resA.error };
 
 				const attestation = resA.ok.find((d) => {
 					const cap = d.capabilities[0];
 					return cap && d.issuer.did() === ctx.signer.did() && cap.can === 'ucan/attest' && (cap.nb as any).proof.toString() === shareLink;
 				});
+
 				if (!attestation) return { ok: { delegations: {} } };
 
 				// Find share delegation
@@ -191,7 +205,7 @@ const createService = (ctx: FireproofServiceContext) => {
 			}),
 			'claim-shares': provide(Clock.claimShares, async ({ capability }) => {
 				// Find share attestations
-				const resA = await ctx.delegationsStorage.find({ audience: capability.nb.issuer });
+				const resA = await ctx.delegationsStorage.find({ audience: capability.nb.recipient });
 				if (resA.error) return { error: resA.error };
 
 				const attestations = resA.ok.filter((d) => {
@@ -257,7 +271,7 @@ const createService = (ctx: FireproofServiceContext) => {
 				// Create attestation & store it
 				const attestation = await UCAN.attest.delegate({
 					issuer: ctx.signer,
-					audience,
+					audience: Server.DID.parse(audience),
 					with: ctx.signer.did(),
 					nb: { proof },
 					expiration: Infinity,
@@ -390,18 +404,19 @@ export default {
 			url,
 			email: {
 				sendValidation: async ({ to, url }) => {
-					await Email.send({
-						postmarkToken: env.POSTMARK_TOKEN,
-						recipient: to,
-						sender: env.EMAIL,
-						template: 'login',
-						templateData: {
-							product_url: 'https://fireproof.storage',
-							product_name: 'Fireproof Storage',
-							email: to,
-							action_url: url,
-						},
-					});
+					if (ctx.emailAddress)
+						await Email.send({
+							postmarkToken: env.POSTMARK_TOKEN,
+							recipient: to,
+							sender: env.EMAIL,
+							template: 'login',
+							templateData: {
+								product_url: 'https://fireproof.storage',
+								product_name: 'Fireproof Storage',
+								email: to,
+								action_url: url,
+							},
+						});
 				},
 			},
 			provisionsStorage,
