@@ -34,7 +34,7 @@ export async function advanceClock({
 	clock: Clock;
 	connection: UCANTO.ConnectionView<Service>;
 	event: UCANTO.Block;
-	server: Signer<DID<'key'>>;
+	server: DU.Principal<DID<'key'>>;
 }) {
 	const invocation = ClockCaps.advance.invoke({
 		issuer: agent.signer,
@@ -150,7 +150,7 @@ export async function getClockHead({
 	agent: Agent;
 	clock: Clock;
 	connection: UCANTO.ConnectionView<Service>;
-	server: Signer<DID<'key'>>;
+	server: DU.Principal<DID<'key'>>;
 }) {
 	const invocation = ClockCaps.head.invoke({
 		issuer: agent.signer,
@@ -172,7 +172,7 @@ export async function registerClock({
 }: {
 	clock: Clock;
 	connection: UCANTO.ConnectionView<Service>;
-	server: Signer<DID<'key'>>;
+	server: DU.Principal<DID<'key'>>;
 }) {
 	const invocation = ClockCaps.register.invoke({
 		issuer: clock.signer,

@@ -6,9 +6,8 @@ import * as W3 from '@web3-storage/w3up-client';
 import { Absentee } from '@ucanto/principal';
 import { ParsedArgs } from 'minimist';
 import { Store as StoreCapabilities } from '@web3-storage/capabilities';
-import { Signer } from '@ucanto/principal/ed25519';
 import { connect } from '@ucanto/client';
-import { parseLink } from '@ucanto/core';
+import { DID, parseLink } from '@ucanto/core';
 import minimist from 'minimist';
 
 import * as ClockCapabilities from '../src/capabilities/clock';
@@ -20,19 +19,15 @@ import { bytesToDelegations } from '@web3-storage/access/encoding';
 // PREP
 
 const HOST = new URL('https://fireproof-ucan.jchris.workers.dev');
+const server = DID.parse('did:key:z6MkjasueTeWJzkNAF7PAU8bZa8a3ii6uK979QKf7Fogyq8M');
+
+console.log('Server ID', server.did());
 
 const args: ParsedArgs = minimist(process.argv.slice(2));
 const email = args.email;
 if (!email) throw new Error('`email` flag is required');
 
 const persona = Absentee.from({ id: DidMailto.fromEmail(email) });
-
-if (!process.env.FIREPROOF_SERVICE_PRIVATE_KEY) {
-	throw new Error('Service private key not found in environment');
-}
-
-const server = Signer.parse(process.env.FIREPROOF_SERVICE_PRIVATE_KEY);
-console.log('Server ID', server.did());
 const connection = Agent.connection<`did:key:${string}`, Service>({
 	principal: server,
 	url: HOST,
@@ -246,7 +241,7 @@ const poll = async () => {
 
 	if (!attestation) {
 		await new Promise((resolve) => {
-			setTimeout(resolve, 1000);
+			setTimeout(resolve, 2500);
 		});
 
 		return await poll();
