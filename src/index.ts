@@ -408,7 +408,7 @@ export default {
 						await Email.send({
 							postmarkToken: env.POSTMARK_TOKEN,
 							recipient: to,
-							sender: env.EMAIL,
+							sender: ctx.emailAddress,
 							template: 'login',
 							templateData: {
 								product_url: 'https://fireproof.storage',
