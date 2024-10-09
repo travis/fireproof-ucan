@@ -54,8 +54,6 @@ type FireproofServiceContext = AccessServiceContext & Context;
 export type Service = ReturnType<typeof createService>;
 
 const createService = (ctx: FireproofServiceContext) => {
-	console.log('🐇', ctx.accessKeyId, ctx.secretAccessKey);
-
 	const S3 = new S3Client({
 		region: 'auto',
 		endpoint: `https://${ctx.accountId}.r2.cloudflarestorage.com`,
