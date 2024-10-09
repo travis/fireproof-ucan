@@ -5,11 +5,11 @@ import * as UCANTO from '@ucanto/server';
 import { Block } from 'multiformats/block';
 import { CID } from 'multiformats';
 import { Delegation, DID, Link, Signer } from '@ucanto/interface';
-import { Service } from '../../src/index';
 import { ed25519 } from '@ucanto/principal';
 import { sha256 } from 'multiformats/hashes/sha2';
 
 import * as ClockCaps from '../../src/capabilities/clock';
+import { Service } from '../../src/index';
 
 export type Agent = {
 	attestation: Delegation;

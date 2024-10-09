@@ -448,7 +448,7 @@ export default {
 			return new Response('Email validated successfully.', { headers: { ContentType: 'text/html' } });
 		}
 
-		if (request.method === 'GET' && url.pathname === '/did') {
+		if (request.method === 'GET' && url.pathname.match(/^\/did\/?$/)) {
 			return new Response(signer.did(), { headers: { ContentType: 'text/html' } });
 		}
 
