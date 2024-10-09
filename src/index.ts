@@ -387,10 +387,6 @@ export default {
 		if (!env.POSTMARK_TOKEN) throw new Error('please set POSTMARK_TOKEN');
 		if (!env.SECRET_ACCESS_KEY) throw new Error('please set SECRET_ACCESS_KEY');
 
-		console.log(env.BUCKET_NAME);
-		console.log(env.ACCESS_KEY_ID);
-		console.log(env.SECRET_ACCESS_KEY);
-
 		// @ts-expect-error I think this is unused by the access service
 		const provisionsStorage: ProvisionsStorage = null;
 
