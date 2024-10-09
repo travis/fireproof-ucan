@@ -54,6 +54,8 @@ type FireproofServiceContext = AccessServiceContext & Context;
 export type Service = ReturnType<typeof createService>;
 
 const createService = (ctx: FireproofServiceContext) => {
+	console.log('🐇', ctx.accessKeyId, ctx.secretAccessKey);
+
 	const S3 = new S3Client({
 		region: 'auto',
 		endpoint: `https://${ctx.accountId}.r2.cloudflarestorage.com`,
@@ -311,11 +313,9 @@ const createService = (ctx: FireproofServiceContext) => {
 			add: provide(Store.add, async ({ capability }) => {
 				const { link, size } = capability.nb;
 
-				const checksum = base64pad.baseEncode(link.multihash.digest);
 				const cmd = new PutObjectCommand({
 					Key: link.toString(),
 					Bucket: ctx.bucketName,
-					ChecksumSHA256: checksum,
 					ContentLength: size,
 				});
 
@@ -323,7 +323,6 @@ const createService = (ctx: FireproofServiceContext) => {
 				const url = new URL(
 					await getSignedUrl(S3, cmd, {
 						expiresIn,
-						unhoistableHeaders: new Set(['x-amz-checksum-sha256']),
 					}),
 				);
 
@@ -387,6 +386,10 @@ export default {
 		if (!env.FIREPROOF_SERVICE_PRIVATE_KEY) throw new Error('please set FIREPROOF_SERVICE_PRIVATE_KEY');
 		if (!env.POSTMARK_TOKEN) throw new Error('please set POSTMARK_TOKEN');
 		if (!env.SECRET_ACCESS_KEY) throw new Error('please set SECRET_ACCESS_KEY');
+
+		console.log(env.BUCKET_NAME);
+		console.log(env.ACCESS_KEY_ID);
+		console.log(env.SECRET_ACCESS_KEY);
 
 		// @ts-expect-error I think this is unused by the access service
 		const provisionsStorage: ProvisionsStorage = null;
