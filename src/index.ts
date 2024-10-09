@@ -315,7 +315,7 @@ const createService = (ctx: FireproofServiceContext) => {
 				const cmd = new PutObjectCommand({
 					Key: link.toString(),
 					Bucket: ctx.bucketName,
-					// TODO: ChecksumSHA256: checksum,
+					ChecksumSHA256: checksum,
 					ContentLength: size,
 				});
 
