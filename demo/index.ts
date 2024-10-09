@@ -2,6 +2,8 @@ import * as Agent from '@web3-storage/access/agent';
 import * as CAR from '@ucanto/transport/car';
 import * as DidMailto from '@web3-storage/did-mailto';
 import * as HTTP from '@ucanto/transport/http';
+import * as Json from 'multiformats/codecs/json';
+import * as UCANTO from '@ucanto/core';
 import * as W3 from '@web3-storage/w3up-client';
 import { Absentee } from '@ucanto/principal';
 import { ParsedArgs } from 'minimist';
@@ -131,6 +133,38 @@ const head = await Client.getClockHead({ agent, clock, connection, server });
 
 console.log('⏰ Clock head', head.out);
 if (head.out.error) process.exit(1);
+
+const getResp = await StoreCapabilities.get
+	.invoke({
+		issuer: agent.signer,
+		audience: server,
+		with: agent.signer.did(),
+		nb: {
+			link: event.cid,
+		},
+	})
+	.execute(connection);
+
+if (getResp.out.error) {
+	console.error(getResp.out.error);
+	process.exit(1);
+}
+
+const eventBytes = getResp.out.ok;
+const decodedCAR = UCANTO.CAR.decode(eventBytes);
+
+const root = decodedCAR.roots[0].cid;
+const block = decodedCAR.blocks.get(root.toString());
+
+if (!block) {
+	console.error('Failed to get block from event CAR file');
+	process.exit(1);
+}
+
+const json = Json.decode(block.bytes);
+const metadataCid = (json as any).data;
+
+console.log('👀 Event data:', metadataCid);
 
 // SHARE TO BOB
 

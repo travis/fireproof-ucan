@@ -5,9 +5,10 @@ import { Agent } from '@web3-storage/access/agent';
 import { Store } from '@web3-storage/capabilities';
 import { Signer } from '@ucanto/principal/ed25519';
 import { parseLink } from '@ucanto/core';
+import { base64pad } from 'multiformats/bases/base64';
 
 import { create as createConnection } from './common/connection';
-import { addToStore } from './common/store';
+import { addToStore, storeOnServer } from './common/store';
 
 ////////////////////////////////////////
 // SETUP
@@ -81,6 +82,7 @@ describe('The Fireproof UCAN service', () => {
 		const authorization = await space.createAuthorization(clientAgent, {
 			access: {
 				'store/add': {},
+				'store/get': {},
 			},
 		});
 
@@ -95,5 +97,16 @@ describe('The Fireproof UCAN service', () => {
 
 		if (result.out.error) throw result.out.error;
 		expect(result.out.ok).toBeTruthy();
+
+		await storeOnServer(carLink, new Uint8Array([5, 6, 7, 8]));
+
+		const getResult = await clientAgent.invokeAndExecute(Store.get, {
+			nb: {
+				link: carLink,
+			},
+		});
+
+		if (getResult.out.error) throw getResult.out.error;
+		expect(base64pad.encode(getResult.out.ok)).toEqual(base64pad.encode(new Uint8Array([5, 6, 7, 8])));
 	});
 });

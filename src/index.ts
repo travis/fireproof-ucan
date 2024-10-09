@@ -16,7 +16,6 @@ import { CAR } from '@ucanto/transport';
 import { AgentMessage } from '@web3-storage/upload-api';
 import { AccessServiceContext, AccessConfirm, ProvisionsStorage } from '@web3-storage/upload-api';
 import { createService as createAccessService } from '@web3-storage/upload-api/access';
-import { base64pad } from 'multiformats/bases/base64';
 import { UnavailableProof } from '@ucanto/validator';
 import { extract } from '@ucanto/core/delegation';
 import { delegationsToBytes, delegationToString, stringToDelegation } from '@web3-storage/access/encoding';
@@ -331,6 +330,17 @@ const createService = (ctx: FireproofServiceContext) => {
 						link,
 						url,
 					},
+				};
+			}),
+			get: provide(Store.get, async ({ capability }) => {
+				const { link } = capability.nb;
+				if (link === undefined) return { error: new Server.Failure('Expected a link to be present') };
+
+				const result = await ctx.bucket.get(link.toString());
+				if (result === null) return { error: new Server.Failure('Item not found in store') };
+
+				return {
+					ok: new Uint8Array(await result.arrayBuffer()),
 				};
 			}),
 		},

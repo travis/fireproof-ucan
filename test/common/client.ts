@@ -131,7 +131,7 @@ export async function createClock({ audience }: { audience: DU.Signer }): Promis
  * Create a clock event.
  */
 export async function createClockEvent({ messageCid }: { messageCid: Link }) {
-	const eventData = { metadata: messageCid };
+	const eventData = { metadata: messageCid.toString() };
 	const event = { parents: [], data: eventData };
 	const eventBytes = Json.encode(event);
 	const eventLink = CID.create(1, Json.code, await sha256.digest(eventBytes));
