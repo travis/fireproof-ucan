@@ -388,6 +388,12 @@ const createServer = async (ctx: FireproofServiceContext) => {
 
 export default {
 	async fetch(request, env, executionContext): Promise<Response> {
+		if (request.method === 'OPTIONS') {
+			// Handle CORS preflight requests
+			return handleOptions(request);
+		}
+
+		// Environment
 		if (!env.ACCESS_KEY_ID) throw new Error('please set ACCESS_KEY_ID');
 		if (!env.ACCOUNT_ID) throw new Error('please set ACCOUNT_ID');
 		if (!env.BUCKET_NAME) throw new Error('please set BUCKET_NAME');
@@ -455,8 +461,18 @@ export default {
 			return new Response('Email validated successfully.', { headers: { ContentType: 'text/html' } });
 		}
 
+		// DID
 		if (request.method === 'GET' && url.pathname.match(/^\/did\/?$/)) {
-			return new Response(signer.did(), { headers: { ContentType: 'text/html' } });
+			const response = new Response(signer.did(), {
+				headers: {
+					ContentType: 'text/html;charset=UTF-8',
+				},
+			});
+
+			response.headers.set('Access-Control-Allow-Origin', '*');
+			response.headers.append('Vary', 'Origin');
+
+			return response;
 		}
 
 		// Otherwise manage UCANTO RPC request
@@ -485,13 +501,46 @@ export default {
 		>(payload);
 
 		const outgoing = await Server.execute(incoming, server);
-		const response = await encoder.encode(outgoing);
+		const encoded = await encoder.encode(outgoing);
 
-		return new Response(response.body, { headers: response.headers });
+		const response = new Response(encoded.body, { headers: encoded.headers });
+		response.headers.set('Access-Control-Allow-Origin', '*');
+		response.headers.append('Vary', 'Origin');
+
+		return response;
 	},
 } satisfies ExportedHandler<Env>;
 
 // 🛠️
+
+const CORS_HEADERS = {
+	'Access-Control-Allow-Origin': '*',
+	'Access-Control-Allow-Methods': 'GET,HEAD,POST,OPTIONS',
+	'Access-Control-Max-Age': '86400',
+};
+
+async function handleOptions(request: Request) {
+	if (
+		request.headers.get('Origin') !== null &&
+		request.headers.get('Access-Control-Request-Method') !== null &&
+		request.headers.get('Access-Control-Request-Headers') !== null
+	) {
+		// Handle CORS preflight requests.
+		return new Response(null, {
+			headers: {
+				...CORS_HEADERS,
+				'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || '',
+			},
+		});
+	} else {
+		// Handle standard OPTIONS request.
+		return new Response(null, {
+			headers: {
+				Allow: 'GET, HEAD, POST, OPTIONS',
+			},
+		});
+	}
+}
 
 function mergeUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
 	const totalSize = arrays.reduce((acc, e) => acc + e.length, 0);
