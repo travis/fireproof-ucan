@@ -1,6 +1,8 @@
 import * as API from '@web3-storage/upload-api/types';
 import * as DidMailto from '@web3-storage/did-mailto';
-import * as Json from 'multiformats/codecs/json';
+import * as Block from 'multiformats/block';
+import * as CBOR from '@ipld/dag-cbor';
+import * as ShaHash from 'multiformats/hashes/sha2';
 import * as Server from '@ucanto/server';
 import * as Signer from '@ucanto/principal/ed25519';
 import * as Store from '@web3-storage/capabilities/store';
@@ -81,10 +83,19 @@ const createService = (ctx: FireproofServiceContext) => {
 
 				const car = Server.CAR.decode(new Uint8Array(await carBytes.arrayBuffer()));
 				const blockCid = all(car.blocks.keys())[0];
-				const block = car.blocks.get(blockCid);
-				if (block === undefined) return { error: new Server.Failure('Unable to locate block in CAR file.') };
+				const ipldBlock = car.blocks.get(blockCid);
+				if (ipldBlock === undefined) return { error: new Server.Failure('Unable to locate block in CAR file.') };
 
-				const event = Json.decode(block.bytes);
+				const block = await Block.decode({
+					bytes: ipldBlock.bytes,
+					codec: {
+						code: CBOR.code,
+						decode: CBOR.decode,
+					},
+					hasher: ShaHash.sha256,
+				});
+
+				const event = block.value;
 
 				// Validate event
 				if (event === null || typeof event !== 'object') return { error: new Server.Failure('Associated clock event is not an object.') };

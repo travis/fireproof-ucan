@@ -7,6 +7,7 @@
 		"demo": "vite-node demo/index.ts",
 		"deploy": "wrangler deploy --keep-vars",
 		"dev": "wrangler dev",
+		"dev-remote": "wrangler dev --remote",
 		"start": "wrangler dev",
 		"test": "vitest --exclude 'test/e2e/**/*'",
 		"test:e2e": "vitest --dir test/e2e/"
@@ -26,7 +27,7 @@
 	"dependencies": {
 		"@aws-sdk/client-s3": "^3.617.0",
 		"@aws-sdk/s3-request-presigner": "^3.617.0",
-		"@ipld/dag-json": "^10.2.2",
+		"@ipld/dag-cbor": "^9.2.1",
 		"@ucanto/core": "^10.0.1",
 		"@ucanto/interface": "^10.0.1",
 		"@ucanto/principal": "^9.0.1",
