@@ -7,13 +7,12 @@ import * as Server from '@ucanto/server';
 import * as Signer from '@ucanto/principal/ed25519';
 import * as Store from '@web3-storage/capabilities/store';
 import * as UCAN from '@web3-storage/capabilities/ucan';
+import * as Uint8Arrays from 'uint8arrays';
 
 import fromAsync from 'array-from-async';
 
 import { Message } from '@ucanto/core';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { KVNamespace, R2Bucket } from '@cloudflare/workers-types';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { CAR } from '@ucanto/transport';
 import { AgentMessage } from '@web3-storage/upload-api';
 import { AccessServiceContext, AccessConfirm, ProvisionsStorage } from '@web3-storage/upload-api';
@@ -21,6 +20,8 @@ import { createService as createAccessService } from '@web3-storage/upload-api/a
 import { UnavailableProof } from '@ucanto/validator';
 import { extract } from '@ucanto/core/delegation';
 import { delegationsToBytes, delegationToString, stringToDelegation } from '@web3-storage/access/encoding';
+import { AwsClient } from 'aws4fetch';
+import { CID } from 'multiformats';
 import all from 'it-all';
 
 import type { Env } from '../worker-configuration';
@@ -55,13 +56,9 @@ type FireproofServiceContext = AccessServiceContext & Context;
 export type Service = ReturnType<typeof createService>;
 
 const createService = (ctx: FireproofServiceContext) => {
-	const S3 = new S3Client({
-		region: 'auto',
-		endpoint: `https://${ctx.accountId}.r2.cloudflarestorage.com`,
-		credentials: {
-			accessKeyId: ctx.accessKeyId,
-			secretAccessKey: ctx.secretAccessKey,
-		},
+	const R2 = new AwsClient({
+		accessKeyId: ctx.accessKeyId,
+		secretAccessKey: ctx.secretAccessKey,
 	});
 
 	const provide = provideConstructor({
@@ -320,18 +317,23 @@ const createService = (ctx: FireproofServiceContext) => {
 			// https://github.com/storacha-network/w3up/blob/e53aa87/packages/capabilities/src/store.js#L41
 			add: provide(Store.add, async ({ capability }) => {
 				const { link, size } = capability.nb;
+				const expiresInSeconds = 60 * 60 * 24; // 1 day
 
-				const cmd = new PutObjectCommand({
-					Key: link.toString(),
-					Bucket: ctx.bucketName,
-					ContentLength: size,
-				});
+				const endpoint =
+					ctx.url.hostname === 'localhost'
+						? `${ctx.url.origin}/r2/${link.toString()}`
+						: `https://${ctx.bucketName}.${ctx.accountId}.r2.cloudflarestorage.com`;
 
-				const expiresIn = 60 * 60 * 24; // 1 day
-				const url = new URL(
-					await getSignedUrl(S3, cmd, {
-						expiresIn,
+				const url = new URL(endpoint);
+				url.searchParams.set('X-Amz-Expires', expiresInSeconds.toString());
+
+				const signedUrl = await R2.sign(
+					new Request(url, {
+						method: 'PUT',
 					}),
+					{
+						aws: { signQuery: true },
+					},
 				);
 
 				return {
@@ -339,7 +341,7 @@ const createService = (ctx: FireproofServiceContext) => {
 						status: 'upload',
 						allocated: size,
 						link,
-						url,
+						url: signedUrl.url,
 					},
 				};
 			}),
@@ -472,6 +474,14 @@ export default {
 			return new Response('Email validated successfully.', { headers: { ContentType: 'text/html' } });
 		}
 
+		// R2 upload
+		const r2 = url.pathname.match(/^\/r2\/([^(\/|$)]+)\/?$/);
+		if (request.method === 'PUT' && r2 && r2[1]) {
+			await r2Put({ bucket: ctx.bucket, cid: r2[1], request });
+
+			return new Response(null, { status: 202 });
+		}
+
 		// DID
 		if (request.method === 'GET' && url.pathname.match(/^\/did\/?$/)) {
 			const response = new Response(signer.did(), {
@@ -493,7 +503,7 @@ export default {
 
 		const pieces = await fromAsync(request.body);
 		const payload = {
-			body: mergeUint8Arrays(...pieces),
+			body: Uint8Arrays.concat(pieces),
 			headers: Object.fromEntries(request.headers),
 		};
 
@@ -522,48 +532,9 @@ export default {
 	},
 } satisfies ExportedHandler<Env>;
 
-// 🛠️
-
-const CORS_HEADERS = {
-	'Access-Control-Allow-Origin': '*',
-	'Access-Control-Allow-Methods': 'GET,HEAD,POST,OPTIONS',
-	'Access-Control-Max-Age': '86400',
-};
-
-async function handleOptions(request: Request) {
-	if (
-		request.headers.get('Origin') !== null &&
-		request.headers.get('Access-Control-Request-Method') !== null &&
-		request.headers.get('Access-Control-Request-Headers') !== null
-	) {
-		// Handle CORS preflight requests.
-		return new Response(null, {
-			headers: {
-				...CORS_HEADERS,
-				'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || '',
-			},
-		});
-	} else {
-		// Handle standard OPTIONS request.
-		return new Response(null, {
-			headers: {
-				Allow: 'GET, HEAD, POST, OPTIONS',
-			},
-		});
-	}
-}
-
-function mergeUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
-	const totalSize = arrays.reduce((acc, e) => acc + e.length, 0);
-	const merged = new Uint8Array(totalSize);
-
-	arrays.forEach((array, i, arrays) => {
-		const offset = arrays.slice(0, i).reduce((acc, e) => acc + e.length, 0);
-		merged.set(array, offset);
-	});
-
-	return merged;
-}
+////////////////////////////////////////
+// HANDLER → EMAIL VALIDATION
+////////////////////////////////////////
 
 async function validateEmail({ url, request, server }: { url: URL; request: Request; server: API.ServerView<Service> }) {
 	const delegation = stringToDelegation(url.searchParams.get('ucan') ?? '');
@@ -603,4 +574,57 @@ async function validateEmail({ url, request, server }: { url: URL; request: Requ
 	const resp = await Server.execute(message, server);
 	const err = Array.from(resp.receipts).find(([_, r]) => !!r.out.error)?.[1]?.out?.error;
 	if (err) throw err;
+}
+
+////////////////////////////////////////
+// HANDLER → R2
+////////////////////////////////////////
+
+export async function r2Put({ bucket, cid, request }: { bucket: R2Bucket; cid: string; request: Request }) {
+	const bytes = request.body && Uint8Arrays.concat(await all(request.body));
+
+	if (!bytes) throw new Error('Expected a request body');
+
+	// const url = new URL(request.url);
+	// TODO: check if link is expired and if store/add capability was invoked
+
+	const givenCID = CID.parse(cid);
+	const hash = await ShaHash.sha256.digest(bytes);
+
+	if (Uint8Arrays.compare(givenCID.multihash.digest, hash.digest) !== 0) {
+		throw new Error('Content did not match given CID');
+	}
+
+	await bucket.put(cid, bytes);
+}
+
+// 🛠️
+
+const CORS_HEADERS = {
+	'Access-Control-Allow-Origin': '*',
+	'Access-Control-Allow-Methods': 'GET,HEAD,POST,OPTIONS',
+	'Access-Control-Max-Age': '86400',
+};
+
+async function handleOptions(request: Request) {
+	if (
+		request.headers.get('Origin') !== null &&
+		request.headers.get('Access-Control-Request-Method') !== null &&
+		request.headers.get('Access-Control-Request-Headers') !== null
+	) {
+		// Handle CORS preflight requests.
+		return new Response(null, {
+			headers: {
+				...CORS_HEADERS,
+				'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || '',
+			},
+		});
+	} else {
+		// Handle standard OPTIONS request.
+		return new Response(null, {
+			headers: {
+				Allow: 'GET, HEAD, POST, OPTIONS',
+			},
+		});
+	}
 }
