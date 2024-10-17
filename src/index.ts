@@ -476,7 +476,7 @@ export default {
 
 		// R2 upload
 		const r2 = url.pathname.match(/^\/r2\/([^(\/|$)]+)\/?$/);
-		if (request.method === 'PUT' && r2 && r2[1]) {
+		if (request.method === 'PUT' && r2 && r2[1] && url.hostname === 'localhost') {
 			await r2Put({ bucket: ctx.bucket, cid: r2[1], request });
 
 			return new Response(null, { status: 202 });
