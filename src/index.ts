@@ -5,7 +5,6 @@ import * as CBOR from '@ipld/dag-cbor';
 import * as ShaHash from 'multiformats/hashes/sha2';
 import * as Server from '@ucanto/server';
 import * as Signer from '@ucanto/principal/ed25519';
-import * as Store from '@web3-storage/capabilities/store';
 import * as UCAN from '@web3-storage/capabilities/ucan';
 import * as Uint8Arrays from 'uint8arrays';
 
@@ -26,6 +25,7 @@ import all from 'it-all';
 
 import type { Env } from '../worker-configuration';
 import * as Clock from './capabilities/clock';
+import * as Store from './capabilities/store';
 import * as Email from './email';
 
 import { create as createAgentStore } from './stores/agents/persistent';
@@ -75,16 +75,11 @@ const createService = (ctx: FireproofServiceContext) => {
 		clock: {
 			advance: provide(Clock.advance, async ({ capability }) => {
 				// Retrieve event and decode it
-				const carBytes = await ctx.bucket.get(capability.nb.event.toString());
-				if (!carBytes) return { error: new Server.Failure('Unable to locate event bytes in store. Was the event stored?') };
-
-				const car = Server.CAR.decode(new Uint8Array(await carBytes.arrayBuffer()));
-				const blockCid = all(car.blocks.keys())[0];
-				const ipldBlock = car.blocks.get(blockCid);
-				if (ipldBlock === undefined) return { error: new Server.Failure('Unable to locate block in CAR file.') };
+				const eventBytes = await ctx.bucket.get(capability.nb.event.toString());
+				if (!eventBytes) return { error: new Server.Failure('Unable to locate event bytes in store. Was the event stored?') };
 
 				const block = await Block.decode({
-					bytes: ipldBlock.bytes,
+					bytes: new Uint8Array(await eventBytes.arrayBuffer()),
 					codec: {
 						code: CBOR.code,
 						decode: CBOR.decode,
