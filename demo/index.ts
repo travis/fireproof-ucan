@@ -1,18 +1,19 @@
 import * as Agent from '@web3-storage/access/agent';
 import * as CAR from '@ucanto/transport/car';
+import * as CBOR from '@ipld/dag-cbor';
 import * as DidMailto from '@web3-storage/did-mailto';
 import * as HTTP from '@ucanto/transport/http';
-import * as Json from 'multiformats/codecs/json';
-import * as UCANTO from '@ucanto/core';
+import * as Block from 'multiformats/block';
 import * as W3 from '@web3-storage/w3up-client';
 import { Absentee } from '@ucanto/principal';
 import { ParsedArgs } from 'minimist';
-import { Store as StoreCapabilities } from '@web3-storage/capabilities';
 import { connect } from '@ucanto/client';
 import { DID, parseLink } from '@ucanto/core';
+import { sha256 } from 'multiformats/hashes/sha2';
 import minimist from 'minimist';
 
 import * as ClockCapabilities from '../src/capabilities/clock';
+import * as StoreCapabilities from '../src/capabilities/store';
 import { Service } from '../src/index';
 
 import * as Client from '../test/common/client';
@@ -150,19 +151,13 @@ if (getResp.out.error) {
 	process.exit(1);
 }
 
-const eventBytes = getResp.out.ok;
-const decodedCAR = UCANTO.CAR.decode(eventBytes);
+const block = await Block.decode({
+	bytes: getResp.out.ok,
+	codec: CBOR,
+	hasher: sha256,
+});
 
-const root = decodedCAR.roots[0].cid;
-const block = decodedCAR.blocks.get(root.toString());
-
-if (!block) {
-	console.error('Failed to get block from event CAR file');
-	process.exit(1);
-}
-
-const json = Json.decode(block.bytes);
-const metadataCid = (json as any).data;
+const metadataCid = (block.value as any).data.metadata;
 
 console.log('👀 Event data:', metadataCid);
 

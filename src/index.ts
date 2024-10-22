@@ -59,6 +59,7 @@ const createService = (ctx: FireproofServiceContext) => {
 	const R2 = new AwsClient({
 		accessKeyId: ctx.accessKeyId,
 		secretAccessKey: ctx.secretAccessKey,
+		region: 'auto',
 	});
 
 	const provide = provideConstructor({
@@ -320,6 +321,7 @@ const createService = (ctx: FireproofServiceContext) => {
 						: `https://${ctx.bucketName}.${ctx.accountId}.r2.cloudflarestorage.com`;
 
 				const url = new URL(endpoint);
+				url.pathname = link.toString();
 				url.searchParams.set('X-Amz-Expires', expiresInSeconds.toString());
 
 				const signedUrl = await R2.sign(

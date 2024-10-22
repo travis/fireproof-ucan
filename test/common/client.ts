@@ -1,9 +1,8 @@
-import * as Json from 'multiformats/codecs/json';
 import * as DU from '@ipld/dag-ucan';
 import * as UCAN from '@web3-storage/capabilities/ucan';
 import * as UCANTO from '@ucanto/server';
-import { Block } from 'multiformats/block';
-import { CID } from 'multiformats';
+import * as Block from 'multiformats/block';
+import * as CBOR from '@ipld/dag-cbor';
 import { Delegation, DID, Link, Signer } from '@ucanto/interface';
 import { ed25519 } from '@ucanto/principal';
 import { sha256 } from 'multiformats/hashes/sha2';
@@ -133,12 +132,14 @@ export async function createClock({ audience }: { audience: DU.Signer }): Promis
 export async function createClockEvent({ messageCid }: { messageCid: Link }) {
 	const eventData = { metadata: messageCid.toString() };
 	const event = { parents: [], data: eventData };
-	const eventBytes = Json.encode(event);
-	const eventLink = CID.create(1, Json.code, await sha256.digest(eventBytes));
 
-	return await UCANTO.CAR.write({
-		roots: [new Block({ cid: eventLink, bytes: eventBytes, value: event })],
+	const block = await Block.encode({
+		value: event,
+		codec: CBOR,
+		hasher: sha256,
 	});
+
+	return block;
 }
 
 export async function getClockHead({
