@@ -3,8 +3,6 @@ name = "fireproof-ucan"
 main = "src/index.ts"
 compatibility_date = "2024-07-22"
 compatibility_flags = ["nodejs_compat"]
-
-account_id = "cae1c33213e6c4d3093a01ae8a7e24b0"
 workers_dev = true
 
 # Automatically place your workloads in an optimal location to minimize latency.
@@ -14,16 +12,14 @@ workers_dev = true
 # [placement]
 # mode = "smart"
 
+# [observability]
+# enabled = true
+
 # Variable bindings. These are arbitrary, plaintext strings (similar to environment variables)
 # Docs:
 # - https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
 # Note: Use secrets to store sensitive data.
 # - https://developers.cloudflare.com/workers/configuration/secrets/
-[vars]
-BUCKET_NAME = "travis-fireproof-cars"
-SERVICE_ID = "did:key:z6Mkv7fM2mH4CkgWbiqmQCwUEJWHsR8EENsgPnm2UtmDeeDJ"
-ACCESS_KEY_ID = "945a5f685a2084960af89692250da0e7"
-ACCOUNT_ID = "cae1c33213e6c4d3093a01ae8a7e24b0"
 
 # Bind the Workers AI model catalog. Run machine learning models, powered by serverless GPUs, on Cloudflare’s global network
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#workers-ai
@@ -74,9 +70,10 @@ ACCOUNT_ID = "cae1c33213e6c4d3093a01ae8a7e24b0"
 
 # Bind a KV Namespace. Use KV as persistent storage for small key-value pairs.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#kv-namespaces
-# [[kv_namespaces]]
-# binding = "MY_KV_NAMESPACE"
-# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+[[kv_namespaces]]
+binding = "kv_store"
+id = "844ded5b13d94e42ae8fa7d35b852499"
+preview_id = "09580587738b4a42940b4c690aa15b85"
 
 # Bind an mTLS certificate. Use to present a client certificate when communicating with another service.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#mtls-certificates
@@ -98,8 +95,9 @@ ACCOUNT_ID = "cae1c33213e6c4d3093a01ae8a7e24b0"
 # Bind an R2 Bucket. Use R2 to store arbitrarily large blobs of data, such as files.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#r2-buckets
 [[r2_buckets]]
-binding = "MY_BUCKET"
-bucket_name = "travis-fireproof-cars"
+binding = "bucket"
+bucket_name = "fireproof"
+preview_bucket_name = "fireproof-preview"
 
 # Bind another Worker service. Use this binding to call another Worker without network overhead.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
